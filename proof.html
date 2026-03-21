@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transaction Proof — PayAdmin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 30px 16px;
+    }
+    .proof-wrap {
+      width: 100%;
+      max-width: 480px;
+    }
+    .proof-header {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .proof-header h1 {
+      font-size: 14px;
+      color: #6b7280;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    .proof-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .proof-bank-header {
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .bank-logo-box {
+      width: 56px;
+      height: 56px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 900;
+      color: white;
+      flex-shrink: 0;
+    }
+    .bank-header-info h2 {
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .bank-header-info p {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 2px;
+    }
+    .proof-status-banner {
+      padding: 10px 24px;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .proof-amount-section {
+      padding: 20px 24px;
+      text-align: center;
+      border-bottom: 1px dashed #e5e7eb;
+      border-top: 1px dashed #e5e7eb;
+    }
+    .proof-amount-label { font-size: 11px; color: #9ca3af; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .proof-amount-value { font-size: 32px; font-weight: 800; color: #111; }
+    .proof-amount-vnd { font-size: 14px; color: #6b7280; font-weight: 600; }
+    .proof-details { padding: 16px 24px; }
+    .proof-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 8px 0;
+      border-bottom: 1px solid #f3f4f6;
+      gap: 12px;
+    }
+    .proof-row:last-child { border-bottom: none; }
+    .proof-row-label {
+      font-size: 11px;
+      color: #9ca3af;
+      font-weight: 500;
+      flex-shrink: 0;
+      min-width: 120px;
+    }
+    .proof-row-value {
+      font-size: 12px;
+      font-weight: 600;
+      color: #111;
+      text-align: right;
+    }
+    .proof-row-value.mono {
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      background: #f8f9fb;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #374151;
+    }
+    .proof-footer {
+      background: #f8f9fb;
+      padding: 14px 24px;
+      text-align: center;
+      font-size: 10px;
+      color: #9ca3af;
+      line-height: 1.6;
+    }
+    .proof-watermark {
+      margin-top: 16px;
+      text-align: center;
+    }
+    .wm-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #ecfdf5;
+      border: 1px solid #10b981;
+      color: #065f46;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .print-btn {
+      display: block;
+      margin: 16px auto 0;
+      padding: 9px 24px;
+      background: #1a7dc4;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .print-btn:hover { background: #155fa0; }
+    @media print {
+      body { background: white; padding: 0; }
+      .print-btn { display: none; }
+      .proof-wrap { max-width: 100%; }
+      .proof-card { box-shadow: none; border: 1px solid #ddd; }
+    }
+  </style>
+</head>
+<body>
+  <div class="proof-wrap">
+    <div class="proof-header">
+      <h1>💳 PayAdmin — Transaction Proof</h1>
+    </div>
+    <div class="proof-card" id="proof-card">
+      <!-- Populated by JS -->
+    </div>
+    <div class="proof-watermark">
+      <span class="wm-badge">✓ Verified by PayAdmin System</span>
+    </div>
+    <button class="print-btn" onclick="window.print()">🖨 Print Proof</button>
+  </div>
+
+  <script>
+    const BANK_COLORS = {
+      'Vietcombank':  { bg: '#006a4e', text: '#006a4e', lightBg: '#e6f4f1' },
+      'Techcombank':  { bg: '#d62828', text: '#d62828', lightBg: '#fef2f2' },
+      'MB Bank':      { bg: '#1034a6', text: '#1034a6', lightBg: '#eff6ff' },
+      'ACB':          { bg: '#0033a0', text: '#0033a0', lightBg: '#eff6ff' },
+      'BIDV':         { bg: '#005bac', text: '#005bac', lightBg: '#e0f2fe' },
+      'VPBank':       { bg: '#007a4d', text: '#007a4d', lightBg: '#ecfdf5' },
+      'VietinBank':   { bg: '#c8102e', text: '#c8102e', lightBg: '#fef2f2' },
+      'OCB':          { bg: '#f47920', text: '#f47920', lightBg: '#fff7ed' },
+      'MSB':          { bg: '#e31837', text: '#e31837', lightBg: '#fef2f2' },
+      'LPBank':       { bg: '#009a44', text: '#009a44', lightBg: '#ecfdf5' },
+      'Sacombank':    { bg: '#005bac', text: '#005bac', lightBg: '#eff6ff' },
+      'SHB':          { bg: '#f4a900', text: '#f4a900', lightBg: '#fffbeb' },
+    };
+
+    function getParam(key) {
+      return new URLSearchParams(window.location.search).get(key) || '';
+    }
+
+    function formatAmount(n) {
+      return Number(n).toLocaleString('vi-VN') + ' VND';
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleString('en-GB', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    }
+
+    function renderProof() {
+      const id = getParam('id');
+      const bank = getParam('bank') || 'Vietcombank';
+      const name = getParam('name') || 'UNKNOWN';
+      const phone = getParam('phone') || '—';
+      const amount = getParam('amount') || '0';
+      const created = getParam('created');
+      const logoUrl = getParam('logo');
+
+      const colors = BANK_COLORS[bank] || { bg: '#1a7dc4', text: '#1a7dc4', lightBg: '#eff6ff' };
+      const bankInitial = bank.slice(0, 3).toUpperCase();
+      
+      // Jika logoUrl ada, tampilkan gambar. Jika tidak, pakai inisial.
+      const logoHtml = logoUrl 
+        ? `<img src="${logoUrl}" style="width:100%;height:100%;object-fit:contain;border-radius:10px" alt="logo" onerror="this.outerHTML='<div style=\'font-size:16px;font-weight:900;color:white;text-align:center\'>${bankInitial}</div>'">`
+        : bankInitial;
+
+      const card = document.getElementById('proof-card');
+      card.innerHTML = `
+        <div class="proof-bank-header" style="background:${colors.lightBg}">
+          <div class="bank-logo-box" style="background:${logoUrl ? 'transparent' : colors.bg}">${logoHtml}</div>
+          <div class="bank-header-info">
+            <h2 style="color:${colors.text}">${bank}</h2>
+            <p>Online Banking Transfer Receipt</p>
+          </div>
+        </div>
+        <div class="proof-status-banner" style="background:#ecfdf5;color:#065f46">
+          ✓ Transaction Successful
+        </div>
+        <div class="proof-amount-section">
+          <div class="proof-amount-label">Transfer Amount</div>
+          <div class="proof-amount-value">${Number(amount).toLocaleString('vi-VN')}</div>
+          <div class="proof-amount-vnd">Vietnamese Dong (VND)</div>
+        </div>
+        <div class="proof-details">
+          <div class="proof-row">
+            <span class="proof-row-label">Recipient Name</span>
+            <span class="proof-row-value">${name}</span>
+          </div>
+          <div class="proof-row">
+            <span class="proof-row-label">Account / Phone</span>
+            <span class="proof-row-value mono">${phone}</span>
+          </div>
+          <div class="proof-row">
+            <span class="proof-row-label">Bank</span>
+            <span class="proof-row-value">${bank}</span>
+          </div>
+          <div class="proof-row">
+            <span class="proof-row-label">Amount</span>
+            <span class="proof-row-value" style="color:#1a7dc4;font-size:14px;font-weight:800">${formatAmount(amount)}</span>
+          </div>
+          <div class="proof-row">
+            <span class="proof-row-label">Date & Time</span>
+            <span class="proof-row-value">${formatDate(created)}</span>
+          </div>
+          <div class="proof-row">
+            <span class="proof-row-label">Transaction ID</span>
+            <span class="proof-row-value mono" style="font-size:10px">${id}</span>
+          </div>
+          <div class="proof-row">
+            <span class="proof-row-label">Reference</span>
+            <span class="proof-row-value mono">${'REF' + Math.random().toString(36).slice(2,10).toUpperCase()}</span>
+          </div>
+          <div class="proof-row">
+            <span class="proof-row-label">Status</span>
+            <span class="proof-row-value">
+              <span style="background:#ecfdf5;color:#065f46;border:1px solid #10b981;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">✓ Completed</span>
+            </span>
+          </div>
+        </div>
+        <div class="proof-footer">
+          This is an automatically generated transaction receipt.<br>
+          PayAdmin Financial Management System · ${new Date().toLocaleString()}<br>
+          <strong>Confidential — For authorized use only</strong>
+        </div>
+      `;
+
+      document.title = `Proof #${id.slice(0,12)} — ${bank}`;
+    }
+
+    renderProof();
+  </script>
+</body>
+</html>

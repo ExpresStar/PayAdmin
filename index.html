@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PayAdmin — Financial Management System</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/otplib@11.0.1/otplib-browser.js"></script>
+  </head>
+  <body>
+    <!-- ===== LOGIN PAGE ===== -->
+    <div id="login-page">
+      <div class="login-card">
+        <div class="login-logo">
+          <h2> PayAdmin</h2>
+          <p>Financial Management System</p>
+        </div>
+        <div class="login-error" id="login-error">
+          ⚠ Please fill in all fields correctly.
+        </div>
+        <div class="form-group">
+          <label>Username</label>
+          <input
+            type="text"
+            id="login-user"
+            placeholder=""
+            autocomplete="username"
+          />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input
+            type="password"
+            id="login-pass"
+            placeholder=""
+            autocomplete="current-password"
+          />
+        </div>
+
+        <div class="form-group" id="2fa-group" style="margin-bottom: 20px;">
+          <label>Google 2FA Code</label>
+          <input
+            type="text"
+            id="login-2fa"
+            placeholder="000000"
+            maxlength="6"
+            style="letter-spacing: 5px; text-align: center; font-weight: 800; border: 2px solid #3b82f6;"
+          />
+        </div>
+
+        <button class="login-btn" onclick="doLogin()">Log In</button>
+        <p
+          style="
+            text-align: center;
+            font-size: 10px;
+            color: #9ca3af;
+            margin-top: 12px;
+          "
+        >
+          PayAdmin is a secure internal tool. Please login with your
+          administrator
+        </p>
+      </div>
+    </div>
+
+    <!-- ===== MAIN APP ===== -->
+    <div id="app">
+      <!-- SIDEBAR -->
+      <nav id="sidebar">
+        <div class="sidebar-header">
+          <!-- <span class="nav-icon">💳</span> -->
+          <span class="sidebar-logo nav-label">PayAdmin</span>
+          <button
+            class="sidebar-toggle-btn"
+            onclick="toggleSidebar()"
+            title="Toggle sidebar"
+          >
+            ☰
+          </button>
+        </div>
+        <div class="sidebar-user">
+          <div class="user-avatar" id="user-avatar-text">AD</div>
+          <div class="user-info nav-label">
+            <div class="user-name" id="sidebar-username">admin</div>
+            <div class="user-role">Administrator</div>
+          </div>
+        </div>
+        <div class="sidebar-nav">
+          <div class="nav-section-label">Main</div>
+          <div
+            class="nav-item active"
+            data-page="dashboard"
+            onclick="switchPage('dashboard', this)"
+          >
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">Dashboard</span>
+          </div>
+          <div class="nav-section-label">Operations</div>
+          <div
+            class="nav-item"
+            data-page="transactions"
+            onclick="switchPage('transactions', this)"
+          >
+            <span class="nav-icon">📋</span>
+            <span class="nav-label">Transaction Mgmt</span>
+          </div>
+          <!-- ===== BANKS ===== -->
+          <div
+            class="nav-item"
+            data-page="banks"
+            onclick="switchPage('banks', this)"
+          >
+            <span class="nav-icon">🏦</span>
+            <span class="nav-label">Bank Mgmt</span>
+          </div>
+          <div
+            class="nav-item"
+            data-page="history"
+            onclick="switchPage('history', this)"
+          >
+            <span class="nav-icon">🕘</span>
+            <span class="nav-label">History</span>
+          </div>
+
+          <div class="nav-section-label">Analytics</div>
+          <div
+            class="nav-item"
+            data-page="reports"
+            onclick="switchPage('reports', this)"
+          >
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">Reports</span>
+          </div>
+        </div>
+      </nav>
+
+      <!-- MAIN CONTENT -->
+      <div id="main">
+        <!-- TOPBAR -->
+        <div id="topbar">
+          <div class="topbar-breadcrumb">
+            <span class="breadcrumb-home" onclick="switchPage('dashboard')"
+              >🏠 Home</span
+            >
+            <span class="breadcrumb-sep">›</span>
+            <span class="breadcrumb-current" id="topbar-page-name"
+              >Dashboard</span
+            >
+          </div>
+          <div class="topbar-right">
+            <span class="topbar-welcome"
+              >Welcome, <strong id="topbar-username">admin</strong></span
+            >
+            <button class="topbar-fullscreen" onclick="toggleFullscreen()">
+              ⛶ Full
+            </button>
+            <button class="topbar-logout" onclick="doLogout()">✕ Logout</button>
+          </div>
+        </div>
+
+        <!-- PAGE ACTIONS -->
+        <div class="page-actions-bar">
+          <button class="page-action-btn" onclick="refreshTableOnly()">
+            ⟳ Refresh
+          </button>
+          <button class="page-action-btn" id="page-nav-prev">◀◀</button>
+          <button class="page-action-btn" id="page-nav-next">▶▶</button>
+        </div>
+
+        <!-- CONTENT -->
+        <div id="content">
+          <!-- ===== DASHBOARD ===== -->
+          <div class="page-section active" id="page-dashboard">
+            <div class="dash-stats">
+              <div class="stat-card">
+                <div class="stat-icon" style="background: #eff6ff">💳</div>
+                <div class="stat-info">
+                  <h3 id="stat-total-tx">0</h3>
+                  <p>Total Transactions</p>
+                </div>
+              </div>
+
+              <!-- AUTOMATION CONTROL -->
+              <div class="stat-card" style="grid-column: span 1; border: 2px dashed #e2e8f0; background: #f8fafc;">
+                <div class="stat-info">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <p style="font-weight:700; color:#475569; font-size:10px; text-transform:uppercase;">🤖 AI Engine</p>
+                    <span id="bot-indicator" style="width:8px; height:8px; border-radius:50%; background:#94a3b8;"></span>
+                  </div>
+                  <h3 id="bot-status-text" style="font-size:14px; color:#64748b;">OFFLINE</h3>
+                  <button id="bot-toggle-btn" class="login-btn" style="margin-top:10px; padding:6px; font-size:11px; background:#64748b;" onclick="toggleBotEngine()">START ENGINE</button>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon" style="background: #fef3c7">⏳</div>
+                <div class="stat-info">
+                  <h3 style="color: #f59e0b">0</h3>
+                  <p>Pending</p>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon" style="background: #ecfdf5">✅</div>
+                <div class="stat-info">
+                  <h3 style="color: #10b981">0</h3>
+                  <p>Completed</p>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon" style="background: #fef2f2">❌</div>
+                <div class="stat-info">
+                  <h3 style="color: #ef4444">0</h3>
+                  <p>Failed / Rejected</p>
+                </div>
+              </div>
+            </div>
+            <div class="dash-recent">
+              <h3>📋 Recent Activity</h3>
+              <p style="color: #9ca3af; font-size: 11px">
+                → Navigate to <strong>Transaction Management</strong> to view
+                and manage all transactions.
+              </p>
+              <br />
+              <div
+                style="
+                  display: grid;
+                  grid-template-columns: repeat(3, 1fr);
+                  gap: 10px;
+                  margin-top: 6px;
+                "
+              >
+                <div
+                  style="
+                    background: #f8faff;
+                    border: 1px solid #dde1e7;
+                    border-radius: 6px;
+                    padding: 10px;
+                    cursor: pointer;
+                  "
+                  onclick="switchPage('transactions')"
+                >
+                  <div style="font-size: 20px; margin-bottom: 4px">📋</div>
+                  <div style="font-size: 12px; font-weight: 700">
+                    Transaction Management
+                  </div>
+                  <div style="font-size: 10px; color: #9ca3af; margin-top: 2px">
+                    View all transactions →
+                  </div>
+                </div>
+                <div
+                  style="
+                    background: #f8faff;
+                    border: 1px solid #dde1e7;
+                    border-radius: 6px;
+                    padding: 10px;
+                    cursor: pointer;
+                  "
+                  onclick="switchPage('banks')"
+                >
+                  <div style="font-size: 20px; margin-bottom: 4px">🏦</div>
+                  <div style="font-size: 12px; font-weight: 700">
+                    Bank Management
+                  </div>
+                  <div style="font-size: 10px; color: #9ca3af; margin-top: 2px">
+                    Manage bank accounts →
+                  </div>
+                </div>
+                <div
+                  style="
+                    background: #f8faff;
+                    border: 1px solid #dde1e7;
+                    border-radius: 6px;
+                    padding: 10px;
+                    cursor: pointer;
+                  "
+                  onclick="switchPage('reports')"
+                >
+                  <div style="font-size: 20px; margin-bottom: 4px">📊</div>
+                  <div style="font-size: 12px; font-weight: 700">Reports</div>
+                  <div style="font-size: 10px; color: #9ca3af; margin-top: 2px">
+                    View reports →
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== TRANSACTIONS ===== -->
+          <div class="page-section" id="page-transactions">
+            <!-- FILTERS -->
+            <div class="filter-panel">
+              <div class="filter-grid">
+                <div class="filter-item">
+                  <label>Transaction ID</label>
+                  <input
+                    type="text"
+                    id="f-txid"
+                    placeholder="Search TX ID..."
+                  />
+                </div>
+                <div class="filter-item">
+                  <label>Order ID</label>
+                  <input
+                    type="text"
+                    id="f-orderid"
+                    placeholder="Search Order ID..."
+                  />
+                </div>
+                <div class="filter-item">
+                  <label>Account Number</label>
+                  <input
+                    type="text"
+                    id="f-accnum"
+                    placeholder="Account number..."
+                  />
+                </div>
+                <div class="filter-item">
+                  <label>Account Name</label>
+                  <input
+                    type="text"
+                    id="f-accname"
+                    placeholder="Account name..."
+                  />
+                </div>
+                <div class="filter-item">
+                  <label>Status</label>
+                  <select id="f-status">
+                    <option value="">All Status</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Processing">Processing</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Failed">Failed</option>
+                  </select>
+                </div>
+                <div class="filter-item">
+                  <label>Bank</label>
+                  <select id="f-bank">
+                    <option value="">All Banks</option>
+                    <option>Vietcombank</option>
+                    <option>Techcombank</option>
+                    <option>MB Bank</option>
+                    <option>ACB</option>
+                    <option>BIDV</option>
+                    <option>VPBank</option>
+                    <option>VietinBank</option>
+                    <option>OCB</option>
+                    <option>MSB</option>
+                    <option>LPBank</option>
+                    <option>Sacombank</option>
+                    <option>SHB</option>
+                    <option>TPBank</option>
+                  </select>
+                </div>
+                <div class="filter-item">
+                  <label>Date From</label>
+                  <input type="date" id="f-date-from" />
+                </div>
+                <div class="filter-item">
+                  <label>Date To</label>
+                  <input type="date" id="f-date-to" />
+                </div>
+              </div>
+              <div class="filter-buttons">
+                <button class="fbtn fbtn-search" onclick="searchTransactions()">
+                  🔍 Search
+                </button>
+                <button class="fbtn fbtn-reset" onclick="resetFilters()">
+                  ↺ Reset
+                </button>
+                <button class="fbtn fbtn-today" onclick="filterToday()">
+                  📅 Today
+                </button>
+                <button class="fbtn fbtn-yesterday" onclick="filterYesterday()">
+                  📅 Yesterday
+                </button>
+              </div>
+            </div>
+
+            <!-- TABLE TOOLBAR -->
+            <div class="table-toolbar">
+              <button
+                class="toolbar-btn"
+                onclick="searchTransactions()"
+                title="Search"
+              >
+                ↺
+              </button>
+              <!-- <button class="toolbar-btn" onclick="buildTable()" title="Refresh">↺</button> -->
+              <button class="toolbar-btn active" title="List view">≡</button>
+              <button class="toolbar-btn" title="Grid view">⊞</button>
+              <button class="toolbar-btn" onclick="toggleFilterPanel()" title="Toggle Filters">↓</button>
+            </div>
+
+            <!-- TABLE -->
+            <div class="table-wrap" id="tx-table-wrap">
+              <table id="tx-table">
+                <thead>
+                  <tr>
+                    <th style="width: 28px">
+                      <input
+                        type="checkbox"
+                        id="check-all"
+                        onchange="toggleAll(this)"
+                      />
+                    </th>
+                    <th>Transaction ID</th>
+                    <th>Order ID</th>
+                    <th>Account No.</th>
+                    <th style="text-align: right">Amount</th>
+                    <th>Account Name</th>
+                    <th>Bank</th>
+                    <th>Status</th>
+                    <th>Source</th>
+                    <th>Created</th>
+                    <th>Process Time</th>
+                    <th>Completed</th>
+                    <th>Actions</th>
+                    <th>Verify</th>
+                  </tr>
+                </thead>
+                <tbody id="tx-tbody"></tbody>
+              </table>
+            </div>
+
+            <!-- PAGINATION -->
+            <div class="pagination-bar">
+              <span id="pagination-info"
+                >Page 1 of 2 · 15 records per page · Total: 15</span
+              >
+              <div class="pagination-btns" id="pagination-btns"></div>
+            </div>
+          </div>
+
+          <!-- HISTORY TRANSACTIONS -->
+
+          <div class="page-section" id="page-history">
+            <!-- HEADER -->
+            <div class="history-header">
+              <div>
+                <h2>History Transactions</h2>
+                <p>Completed & Failed transactions</p>
+              </div>
+
+              <div class="history-actions">
+                <button
+                  class="toolbar-btn"
+                  onclick="loadHistory()"
+                  title="Refresh History"
+                  style="height: 100%;"
+                >
+                  ↺
+                </button>
+                <input
+                  type="text"
+                  id="history-search"
+                  placeholder="Search admin..."
+                  oninput="loadHistory()"
+                />
+              </div>
+            </div>
+
+            <!-- CARD TABLE -->
+            <div class="card-table">
+              <div class="table-wrap">
+                <table id="history-table">
+                  <thead>
+                    <tr>
+                      <th>Transaction ID</th>
+                      <th>Account</th>
+                      <th>Bank</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Completed</th>
+                      <th>Admin</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="history-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- SUMMARY -->
+
+            <div class="box-history">
+              <div id="history-summary"></div>
+              <div id="history-pagination"></div>
+            </div>
+          </div>
+
+          <!-- ===== BANKS ===== -->
+          <div class="page-section" id="page-banks">
+            <div style="margin-bottom: 12px">
+              <div class="bank-header">
+                <h2
+                  style="font-size: 15px; font-weight: 700; margin-bottom: 4px"
+                >
+                  🏦 Bank Management
+                </h2>
+                <p style="font-size: 11px; color: #9ca3af">
+                  Select the bank you want to process transactions through
+                </p>
+              </div>
+            </div>
+            <div class="bank-wrapper">
+              <div class="bank-grid" id="bank-grid"></div>
+            </div>
+          </div>
+
+          <!-- ===== REPORTS ===== -->
+          <div class="page-section" id="page-reports">
+            <div style="margin-bottom: 12px">
+              <h2 style="font-size: 15px; font-weight: 700; margin-bottom: 4px">
+                📊 Reports
+              </h2>
+              <p style="font-size: 11px; color: #9ca3af">
+                View system reports and analytics
+              </p>
+            </div>
+            <div class="reports-cards">
+              <div class="report-card" onclick="reportTransactionSummary()">
+                <div class="report-card-icon">📈</div>
+                <h4>Transaction Summary</h4>
+                <p>Daily, weekly, monthly transaction overview</p>
+              </div>
+              <div class="report-card" onclick="reportRevenue()">
+                <div class="report-card-icon">💰</div>
+                <h4>Revenue Report</h4>
+                <p>Total processed volume by bank and status</p>
+              </div>
+              <div class="report-card" onclick="reportBankPerformance()">
+                <div class="report-card-icon">🏦</div>
+                <h4>Bank Performance</h4>
+                <p>Success rate and processing time by bank</p>
+              </div>
+              <div class="report-card" onclick="reportFailedTransactions()">
+                <div class="report-card-icon">❌</div>
+                <h4>Failed Transactions</h4>
+                <p>Rejected and failed transaction analysis</p>
+              </div>
+              <div class="report-card" onclick="reportTopAccounts()">
+                <div class="report-card-icon">👤</div>
+                <h4>Account Report</h4>
+                <p>Top accounts by transaction volume</p>
+              </div>
+              <div class="report-card" onclick="reportTimeAnalysis()">
+                <div class="report-card-icon">📅</div>
+                <h4>Time Analysis</h4>
+                <p>Processing time distribution report</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- /content -->
+      </div>
+      <!-- /main -->
+    </div>
+    <!-- /app -->
+
+    <!-- ===== MODALS ===== -->
+
+    <!--
+  UNIFIED MODAL SYSTEM
+  All 4 action modals share identical structure:
+    • Info section (dynamic per action)
+    • Textarea (required — gates both buttons)
+    • Confirm (yellow) + Cancel (gray) — BOTH disabled until textarea has input
+-->
+
+    <!-- ── CONFIRM CLIENT DATA MODAL ── -->
+    <div class="modal-overlay" id="modal-confirm">
+      <div class="modal" style="max-width: 480px">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="modal-title-icon modal-icon-confirm">✅</span>
+            <span class="modal-title">Confirm Client Data</span>
+          </div>
+          <button class="modal-close" onclick="closeModal('modal-confirm')">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <!-- Dynamic info block -->
+          <div class="modal-info-block" id="confirm-info"></div>
+          <!-- Shared input section -->
+          <div class="modal-input-section">
+            <label class="modal-input-label">
+              <span class="modal-input-required">*</span> Confirmation Note
+              <span class="modal-input-hint" id="confirm-hint"
+                >— type to enable buttons</span
+              >
+            </label>
+            <textarea
+              class="modal-textarea"
+              id="confirm-textarea"
+              placeholder="Paste or type input here..."
+              oninput="handleModalInput('confirm')"
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="modal-btn modal-btn-confirm"
+            id="confirm-btn-ok"
+            disabled
+            onclick="doConfirmClient()"
+          >
+            ✓ Confirm
+          </button>
+          <button
+            class="modal-btn modal-btn-mcancel"
+            id="confirm-btn-cancel"
+            disabled
+            onclick="closeModal('modal-confirm')"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── REJECT MODAL ── -->
+    <div class="modal-overlay" id="modal-reject">
+      <div class="modal" style="max-width: 480px">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="modal-title-icon modal-icon-reject">✖</span>
+            <span class="modal-title">Reject Transaction</span>
+          </div>
+          <button class="modal-close" onclick="closeModal('modal-reject')">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-info-block" id="reject-info"></div>
+          <div class="modal-input-section">
+            <label class="modal-input-label">
+              <span class="modal-input-required">*</span> Rejection Reason
+              <span class="modal-input-hint" id="reject-hint"
+                >— type to enable buttons</span
+              >
+            </label>
+            <textarea
+              class="modal-textarea"
+              id="reject-textarea"
+              placeholder="Paste or type input here..."
+              oninput="handleModalInput('reject')"
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="modal-btn modal-btn-confirm"
+            id="reject-btn-ok"
+            disabled
+            onclick="confirmReject()"
+          >
+            ✓ Confirm
+          </button>
+          <button
+            class="modal-btn modal-btn-mcancel"
+            id="reject-btn-cancel"
+            disabled
+            onclick="closeModal('modal-reject')"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CHECK ACCOUNT NUMBER MODAL ── -->
+    <div class="modal-overlay" id="modal-checknum">
+      <div class="modal" style="max-width: 480px">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="modal-title-icon modal-icon-checknum">🔢</span>
+            <span class="modal-title">Check Account Number</span>
+          </div>
+          <button class="modal-close" onclick="closeModal('modal-checknum')">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-info-block" id="checknum-info"></div>
+          <div class="modal-input-section">
+            <label class="modal-input-label">
+              <span class="modal-input-required">*</span> Account Number to
+              Verify
+              <span class="modal-input-hint" id="checknum-hint"
+                >— type to enable buttons</span
+              >
+            </label>
+            <textarea
+              class="modal-textarea"
+              id="checknum-textarea"
+              placeholder="Paste or type input here..."
+              oninput="handleModalInput('checknum')"
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="modal-btn modal-btn-confirm"
+            id="checknum-btn-ok"
+            disabled
+            onclick="doCheckNum()"
+          >
+            ✓ Confirm
+          </button>
+          <button
+            class="modal-btn modal-btn-mcancel"
+            id="checknum-btn-cancel"
+            disabled
+            onclick="closeModal('modal-checknum')"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CHECK ACCOUNT NAME MODAL ── -->
+    <div class="modal-overlay" id="modal-checkname">
+      <div class="modal" style="max-width: 480px">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="modal-title-icon modal-icon-checkname">👤</span>
+            <span class="modal-title">Check Account Name</span>
+          </div>
+          <button class="modal-close" onclick="closeModal('modal-checkname')">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-info-block" id="checkname-info"></div>
+          <div class="modal-input-section">
+            <label class="modal-input-label">
+              <span class="modal-input-required">*</span> Account Name to Verify
+              <span class="modal-input-hint" id="checkname-hint"
+                >— type to enable buttons</span
+              >
+            </label>
+            <textarea
+              class="modal-textarea"
+              id="checkname-textarea"
+              placeholder="Paste or type input here..."
+              oninput="handleModalInput('checkname')"
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="modal-btn modal-btn-confirm"
+            id="checkname-btn-ok"
+            disabled
+            onclick="doCheckName()"
+          >
+            ✓ Confirm
+          </button>
+          <button
+            class="modal-btn modal-btn-mcancel"
+            id="checkname-btn-cancel"
+            disabled
+            onclick="closeModal('modal-checkname')"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DETAIL MODAL (view only — no textarea required) ── -->
+    <div class="modal-overlay" id="modal-detail">
+      <div class="modal" style="max-width: 520px">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span
+              class="modal-title-icon"
+              style="background: #eff6ff; color: #1d4ed8"
+              >🔍</span
+            >
+            <span class="modal-title">Transaction Detail</span>
+          </div>
+          <button class="modal-close" onclick="closeModal('modal-detail')">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body" id="detail-body"></div>
+        <div class="modal-footer">
+          <button
+            class="modal-btn modal-btn-primary"
+            onclick="closeModal('modal-detail')"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── RESULT MODAL (check result display) ── -->
+    <div class="modal-overlay" id="modal-result">
+      <div class="modal" style="max-width: 440px">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span
+              class="modal-title-icon"
+              id="result-modal-icon"
+              style="background: #f0fdf4; color: #15803d"
+              >✓</span
+            >
+            <span class="modal-title" id="result-modal-title"
+              >Verification Result</span
+            >
+          </div>
+          <button class="modal-close" onclick="closeModal('modal-result')">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body" id="result-body"></div>
+        <div class="modal-footer">
+          <button
+            class="modal-btn modal-btn-primary"
+            onclick="closeModal('modal-result')"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ERROR MODAL ── -->
+    <div class="modal-overlay" id="modal-error">
+      <div class="modal" style="max-width: 400px">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span
+              class="modal-title-icon"
+              style="background: #fef2f2; color: #dc2626"
+              >⚠</span
+            >
+            <span class="modal-title">System Notice</span>
+          </div>
+          <button class="modal-close" onclick="closeModal('modal-error')">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body" style="text-align: center; padding: 20px 16px">
+          <div class="error-icon">⊗</div>
+          <div class="error-msg" id="error-msg-text">
+            Transaction is not in the correct state.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="modal-btn modal-btn-primary"
+            onclick="closeModal('modal-error')"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── REPORT MODAL ── -->
+    <div class="modal-overlay" id="modal-report">
+      <div class="modal" style="max-width:680px;width:95%">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="modal-title-icon" id="report-modal-icon" style="background:#eff6ff;color:#1d4ed8">📊</span>
+            <span class="modal-title" id="report-modal-title">Report</span>
+          </div>
+          <button class="modal-close" onclick="closeModal('modal-report')">✕</button>
+        </div>
+        <div class="modal-body" id="report-modal-body" style="max-height:65vh;overflow-y:auto;padding:16px 20px">
+          <div style="text-align:center;padding:30px;color:#9ca3af">Loading...</div>
+        </div>
+        <div class="modal-footer" style="gap:8px">
+          <button class="modal-btn" id="report-export-btn"
+            style="background:#166534;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"
+            onclick="exportReportExcel()">
+            ⬇ Export Excel
+          </button>
+          <button class="modal-btn modal-btn-primary" onclick="closeModal('modal-report')">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOTIFICATION -->
+    <div class="sys-notice" id="sys-notice">
+      <span id="sys-notice-text">Action completed.</span>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+# Logs
+*.log
+brackets.txt
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Vercel & Node
+.vercel
+node_modules/
+dist/
+build/
+.next/
+
+# Environment
+.env
+.env.local
+.env.*.local
