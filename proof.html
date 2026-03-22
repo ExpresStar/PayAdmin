@@ -150,14 +150,46 @@
     .print-btn:hover { background: #155fa0; }
     @media print {
       body { background: white; padding: 0; }
-      .print-btn { display: none; }
+      .print-btn, .zoom-controls { display: none; }
       .proof-wrap { max-width: 100%; }
       .proof-card { box-shadow: none; border: 1px solid #ddd; }
     }
+
+    /* Zoom Controls */
+    .zoom-controls {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+    }
+    .z-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: white;
+      border: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      transition: all 0.2s;
+    }
+    .z-btn:hover { background: #f0f0f0; transform: scale(1.1); }
   </style>
 </head>
 <body>
-  <div class="proof-wrap">
+  <div class="zoom-controls">
+    <button class="z-btn" onclick="adjustZoom(-0.1)">−</button>
+    <button class="z-btn" onclick="resetZoom()" style="font-size:11px">100%</button>
+    <button class="z-btn" onclick="adjustZoom(0.1)">+</button>
+  </div>
+
+  <div class="proof-wrap" id="zoom-area" style="transition: transform 0.2s; transform-origin: top center;">
     <div class="proof-header">
       <h1>💳 PayAdmin — Transaction Proof</h1>
     </div>
@@ -171,6 +203,25 @@
   </div>
 
   <script>
+    let currentZoom = 1;
+    function adjustZoom(delta) {
+      currentZoom += delta;
+      if (currentZoom < 0.5) currentZoom = 0.5;
+      if (currentZoom > 3) currentZoom = 3;
+      document.getElementById('zoom-area').style.transform = `scale(${currentZoom})`;
+    }
+    function resetZoom() {
+      currentZoom = 1;
+      document.getElementById('zoom-area').style.transform = `scale(1)`;
+    }
+
+    window.addEventListener('wheel', (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        adjustZoom(delta);
+      }
+    }, { passive: false });
     const BANK_COLORS = {
       'Vietcombank':  { bg: '#006a4e', text: '#006a4e', lightBg: '#e6f4f1' },
       'Techcombank':  { bg: '#d62828', text: '#d62828', lightBg: '#fef2f2' },
