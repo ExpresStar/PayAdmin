@@ -84,21 +84,6 @@ async function doLogin() {
   initRealtime();
 }
 
-// 🔐 AUTO-LOGIN CHECK (Shared Session)
-async function checkExistingSession() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session && session.user) {
-    console.log("Found existing session for:", session.user.email);
-    currentUser = session.user.email;
-    loadAbsensiState();
-    document.getElementById("login-page").style.display = "none";
-    document.getElementById("chat-ui").style.display = "flex";
-    switchRoom('worker');
-    initRealtime();
-  }
-}
-checkExistingSession();
-
 function saveAbsensiState() {
   if (currentUser) {
     localStorage.setItem(`absensi_${currentUser}`, JSON.stringify(absensiState));
@@ -196,7 +181,7 @@ async function sendAction(text) {
     await sb.from("messages").insert([{ username: currentUser, message: `<i>${text}</i>`, type: "action" }]);
   }
 
-  // Summary to Absensi room
+  // Summary to Absensi room — simpan dengan username sendiri supaya hanya tampil ke user yg bersangkutan
   const summary = `
   <div class="absensi-box">
     <div class="absensi-title">📊 ${currentUser}'s Summary</div>
@@ -206,10 +191,11 @@ async function sendAction(text) {
     <div class="absensi-row pulang"><span>Check-out</span> <span>${absensiState.pulang || "—"}</span></div>
   </div>`;
 
-  const botData = { username: "BOT", message: summary, type: "bot", room: "absensi" };
+  // Simpan summary dengan username = currentUser (bukan BOT) agar bisa difilter per admin
+  const botData = { username: currentUser, message: summary, type: "bot", room: "absensi" };
   const { error: err2 } = await sb.from("messages").insert([botData]);
   if (err2 && err2.message.includes('column "room" does not exist')) {
-    await sb.from("messages").insert([{ username: "BOT", message: summary, type: "bot" }]);
+    await sb.from("messages").insert([{ username: currentUser, message: summary, type: "bot" }]);
   }
 }
 
@@ -230,6 +216,11 @@ function renderMessage(m) {
 
   if (msgRoom !== currentActive) {
     updateSidebarPreview(m);
+    return;
+  }
+
+  // 🔒 Di room Absensi: skip pesan milik admin lain
+  if (currentActive === 'absensi' && m.username !== currentUser && m.type === 'bot') {
     return;
   }
 
@@ -263,7 +254,7 @@ function renderMessage(m) {
     const imgUrl = parts[0];
     const captionText = parts[1] || "";
 
-    html += `<img src="${imgUrl}" class="msg-img" onclick="window.open('${imgUrl}', '_blank')" />`;
+    html += `<img src="${imgUrl}" class="msg-img" onclick="openZoom('${imgUrl}')" />`;
     if (captionText) {
       html += `<div style="margin-top: 6px; font-size: 14px; color: #fff;">${captionText}</div>`;
     }
@@ -399,12 +390,18 @@ async function loadMessages() {
     query = query.eq('room', activeRoom.toLowerCase());
   }
   
+  // 🔒 Di room Absensi: hanya tampilkan pesan milik sendiri
+  if (activeRoom === 'absensi') {
+    query = query.eq('username', currentUser);
+  }
+  
   // Ambil 50 pesan TERBARU (descending)
   let { data, error } = await query.order("created_at", { ascending: false }).limit(50);
 
   if (error && error.message.includes('column "room" does not exist')) {
-    const fallback = await sb.from("messages").select("*").order("created_at", { ascending: false }).limit(50);
-    data = fallback.data;
+    // Fallback: ambil semua tapi filter manual
+    const fallback = await sb.from("messages").select("*").order("created_at", { ascending: false }).limit(100);
+    data = fallback.data?.filter(m => m.username === currentUser) ?? [];
     error = fallback.error;
   }
 
@@ -496,4 +493,90 @@ document.getElementById("chat-input").addEventListener("keypress", (e) => {
 // GLOBAL TOOLS
 document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && document.getElementById("login-page").style.display !== "none") doLogin();
+  if (e.key === "Escape") closeZoom();
+});
+
+// =======================
+// IMAGE ZOOM SYSTEM
+// =======================
+
+let zoomScale = 1;
+let isDragging = false;
+let startX, startY, translateX = 0, translateY = 0;
+
+function openZoom(url) {
+  const modal = document.getElementById('zoom-modal');
+  const img = document.getElementById('zoom-img-target');
+  img.src = url;
+  modal.style.display = 'flex';
+  
+  // Calculate initial scale to fit nicely if it's too small
+  // We'll let CSS handle the fitting for large images (max-width: 90%)
+  // but if it's tiny we can boost it. Actually let's just use scale=1
+  // and ensure CSS is max-width/height 90%.
+  
+  resetZoom();
+}
+
+function closeZoom() {
+  document.getElementById('zoom-modal').style.display = 'none';
+}
+
+function applyZoom(delta) {
+  const oldScale = zoomScale;
+  zoomScale += delta;
+  if (zoomScale < 0.1) zoomScale = 0.1;
+  if (zoomScale > 10) zoomScale = 10;
+  updateZoomTransform();
+}
+
+function resetZoom() {
+  zoomScale = 1;
+  translateX = 0;
+  translateY = 0;
+  updateZoomTransform();
+}
+
+function updateZoomTransform() {
+  const img = document.getElementById('zoom-img-target');
+  if (img) {
+    img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${zoomScale})`;
+  }
+}
+
+// Drag functionality
+const container = document.getElementById('zoom-container');
+if (container) {
+  container.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    startX = e.clientX - translateX;
+    startY = e.clientY - translateY;
+    container.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    translateX = e.clientX - startX;
+    translateY = e.clientY - startY;
+    updateZoomTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+    if (container) container.style.cursor = 'grab';
+  });
+
+  // Mouse wheel zoom
+  container.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.2 : 0.2;
+    applyZoom(delta);
+  }, { passive: false });
+}
+
+// Click background to close
+document.getElementById('zoom-modal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'zoom-modal' || e.target.id === 'zoom-container') {
+    closeZoom();
+  }
 });
