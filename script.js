@@ -194,19 +194,27 @@ function getProofUrl(tx) {
   // Deterministic random based on transaction_id
   const h = Math.abs(hashString(tx.transaction_id || ""));
   
-  // 25% chance of mismatch BETWEEN table and uploaded proof
-  if (h % 4 === 0) {
-    const errType = h % 3;
+  // 1/250 chance (~15 menit sekali dengan asumi 1 transaksi per 3-4 detik)
+  if (h % 250 === 0 || h % 250 === 1) { 
+    const errType = h % 3; // Hanya 3 tipe error: Nama, Nominal, Bank
+    
     if (errType === 0) {
-      // Name typo on proof
-      pName = pName.split(" ")[0] || pName; 
-    } else if (errType === 1) {
-      // Amount typo on proof (e.g. they transferred 100k but receipt says 50k, or vice versa)
-      pAmount = pAmount + ((h % 5) + 1) * 10000; 
-    } else {
-      // Bank typo on proof
-      const banks = ["Vietcombank", "Techcombank", "MB Bank", "ACB"];
-      pBank = banks[(h % banks.length)];
+      // 1. Nama Tidak Sesuai (Pake nama singkatan / salah nama lengkap)
+      pName = pName.split(" ")[0] + " " + (["Smith", "Wong", "Putra", "Aditya", "Nguyen"][h % 5]); 
+    } 
+    else if (errType === 1) {
+      // 2. Nominal Transfer Kurang/Lebih di Struk (Misal: 50.000 jadi 500.000 atau nominal random)
+      if (h % 2 === 0) {
+        pAmount = pAmount + ((h % 5) + 1) * 25000; 
+      } else {
+        pAmount = Math.floor(pAmount / 10);
+      }
+    } 
+    else {
+      // 3. Bank Tujuan di Struk Salah
+      const banks = ["Vietcombank", "Techcombank", "MB Bank", "ACB", "VPBank", "Sacombank"];
+      // Pilih bank yang TIDAK sama dengan bank asli
+      pBank = banks[(h % banks.length)] !== pBank ? banks[(h % banks.length)] : banks[(h % banks.length + 1) % banks.length];
     }
   }
 
@@ -1463,32 +1471,16 @@ function generateSmartTransaction() {
     " " +
     lastNames[Math.floor(Math.random() * lastNames.length)];
 
-  const bank = banks[Math.floor(Math.random() * banks.length)];
+  let bank = banks[Math.floor(Math.random() * banks.length)];
 
   let accNum = "0" + Math.floor(100000000 + Math.random() * 900000000);
   
   // Normal amount: multiples of 50,000 (e.g. 50k, 100k, 250k)
   let amount = (Math.floor(Math.random() * 50) + 1) * 50000; 
 
-  // 🔥 SIFAT MANUSIA (4% peluang adanya Human Error - sangat jarang)
-  if (Math.random() < 0.04) {
-    const errType = Math.random();
-    if (errType < 0.33) {
-      // Error 1: Rekening kurang/kelebihan digit (misal cuma 5 angka)
-      accNum = "0" + Math.floor(1000 + Math.random() * 9000);
-    } else if (errType < 0.66) {
-      // Error 2: Typo nama (huruf kecil semua, atau salah eja/typo dempet)
-      name = name.toLowerCase().replace(" ", "");
-    } else {
-      // Error 3: Nominal typo (misal transfer 50.003, atau kurang nol jadi 5.000)
-      if (Math.random() < 0.5) {
-        amount += Math.floor(Math.random() * 99) + 1; // jadi 50034
-      } else {
-        amount = Math.floor(amount / 10); // kurang 0, misal 500k jadi 50k
-      }
-    }
-  }
-
+  // Data transaksi SELALU benar dan rapi di tabel, 
+  // Human error hanya terjadi pada ketidaksesuaian BUKTI TRANSAKSI (Proof) dengan tabel ini.
+  
   // Sinkronisasi dengan jam asli dunia nyata agar tidak tertinggal (Drift)
   const nowReal = Date.now();
   if (lastTime < nowReal) lastTime = nowReal;
