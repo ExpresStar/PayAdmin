@@ -604,10 +604,68 @@
     .preview-send-btn:hover { background: #5865c3; }
     .preview-send-btn:disabled { background: #444; color: #888; cursor: not-allowed; }
 
+    /* === ZOOM MODAL === */
+    .zoom-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.95);
+      z-index: 10000; display: none; align-items: center; justify-content: center;
+      flex-direction: column; backdrop-filter: blur(15px);
+    }
+    .zoom-container {
+      position: relative; width: 100vw; height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; cursor: grab;
+    }
+    .zoom-container:active { cursor: grabbing; }
+    .zoom-img {
+      width: 90vw; height: 90vh; /* Force fill the viewport */
+      object-fit: contain; /* But maintain aspect ratio */
+      transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      user-select: none; pointer-events: none;
+      filter: drop-shadow(0 20px 50px rgba(0,0,0,0.5));
+    }
+    .zoom-controls {
+      position: absolute; bottom: 40px; left: 50%;
+      transform: translateX(-50%); display: flex; gap: 20px;
+      background: rgba(255,255,255,0.08); padding: 12px 25px;
+      border-radius: 40px; backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      z-index: 1000;
+    }
+    .zoom-btn {
+      background: white; border: none; width: 40px; height: 40px;
+      border-radius: 50%; font-size: 20px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .zoom-btn:hover { transform: scale(1.1); background: #f0f0f0; }
+    .zoom-close {
+      position: absolute; top: 30px; right: 30px;
+      width: 44px; height: 44px; background: rgba(255,255,255,0.1);
+      color: white; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; font-size: 24px;
+      cursor: pointer; border: 1px solid rgba(255,255,255,0.2);
+      transition: all 0.2s; z-index: 1000;
+    }
+    .zoom-close:hover { background: #ef4444; border-color: #ef4444; transform: rotate(90deg); }
+
   </style>
 </head>
 
 <body>
+
+  <!-- ===== ZOOM MODAL ===== -->
+  <div id="zoom-modal" class="zoom-modal">
+    <div class="zoom-close" onclick="closeZoom()">✕</div>
+    <div class="zoom-container" id="zoom-container">
+      <img id="zoom-img-target" class="zoom-img" src="" alt="Zoomed" />
+    </div>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="applyZoom(-0.2)" title="Zoom Out">−</button>
+      <button class="zoom-btn" onclick="resetZoom()" title="Reset" style="font-size:14px">RESET</button>
+      <button class="zoom-btn" onclick="applyZoom(0.2)" title="Zoom In">+</button>
+    </div>
+  </div>
 
   <!-- ===== LOGIN PAGE ===== -->
   <div id="login-page">
