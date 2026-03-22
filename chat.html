@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Support</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- OTPLIB for 2FA -->
+  <script src="https://unpkg.com/otplib@11.0.1/otplib-browser.js"></script>
+
+  <style>
+    :root {
+      /* Telegram Dark Blue Theme Colors */
+      --tg-bg-sidebar: #17212b;
+      --tg-bg-chat: #213C51;
+      --tg-bg-header: #17212b;
+      --tg-bg-bubble-other: #182533;
+      --tg-bg-bubble-me: #2b5278;
+      --tg-bg-input: #17212b;
+      --tg-bg-active: #2b5278;
+      --tg-text: #f5f5f5;
+      --tg-text-chat: #ffffff;
+      --tg-text-muted: #7f91a4;
+      --tg-accent: #5288c1;
+      --tg-border: #131c26;
+      --tg-border-light: rgba(255,255,255,0.1);
+      
+      /* Login colors from index.html */
+      --primary: #1a7dc4;
+      --primary-dark: #155fa0;
+      --border: #dde1e7;
+      --text-muted: #6b7280;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 100vh;
+      background-color: var(--tg-bg-chat);
+      color: var(--tg-text);
+      overflow: hidden;
+      display: flex;
+    }
+
+    /* === LOGIN PAGE === */
+    #login-page {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      background: linear-gradient(135deg, #0e1621 0%, #17212b 100%);
+    }
+
+    .login-card {
+      background: white;
+      border-radius: 12px;
+      padding: 36px 40px;
+      width: 380px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      color: #333;
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .login-logo h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .login-logo p {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .login-error {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: #dc2626;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      transition: border 0.2s;
+    }
+
+    .form-group input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(26,125,196,0.1);
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 10px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 6px;
+    }
+
+    .login-btn:hover {
+      background: var(--primary-dark);
+    }
+
+    /* === CHAT UI MAIN LAYOUT === */
+    #chat-ui {
+      display: none; /* Shown after login */
+      width: 100%;
+      height: 100vh;
+      flex-direction: row;
+    }
+
+    /* === SIDEBAR === */
+    .tg-sidebar {
+      width: 320px;
+      background: var(--tg-bg-sidebar);
+      border-right: 1px solid var(--tg-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 8px 16px;
+      background: var(--tg-bg-sidebar);
+      border-bottom: 1px solid var(--tg-border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .search-bar {
+      background: #242f3d;
+      border-radius: 20px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .search-bar input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #7f91a4;
+      font-size: 14px;
+      width: 100%;
+    }
+
+    /* ROOM LIST */
+    .room-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .room-item {
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .room-item:hover {
+      background: #202b36;
+    }
+
+    .room-item.active {
+      background: var(--tg-bg-active);
+    }
+
+    .room-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #5288c1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 18px;
+      color: white;
+    }
+
+    .room-info {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .room-name-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 2px;
+    }
+
+    .room-name {
+      font-weight: 500;
+      font-size: 15px;
+      color: white;
+    }
+
+    .room-time {
+      font-size: 12px;
+      color: var(--tg-text-muted);
+    }
+
+    .room-msg-preview {
+      font-size: 13px;
+      color: var(--tg-text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* === CHAT AREA === */
+    .tg-main-chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--tg-bg-chat);
+      position: relative;
+      color: var(--tg-text-chat);
+    }
+
+    .chat-header {
+      background: var(--tg-bg-header);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--tg-border);
+      z-index: 10;
+      color: white; /* Gunakan warna putih untuk teks header */
+    }
+
+    .header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .header-title {
+      font-weight: 700;
+      font-size: 16px;
+      color: #ffffff;
+    }
+
+    .header-subtitle {
+      font-size: 13px;
+      color: var(--tg-accent); /* Blue-ish like Telegram */
+    }
+
+    #chat-box {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #chat-box::-webkit-scrollbar { width: 6px; }
+    #chat-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+
+    /* MESSAGES */
+    .tg-msg-wrapper {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 4px;
+    }
+
+    .msg {
+      max-width: 70%;
+      padding: 8px 12px;
+      border-radius: 12px;
+      position: relative;
+      font-size: 14.5px;
+      line-height: 1.4;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+      word-wrap: break-word;
+    }
+
+    .other {
+      align-self: flex-start;
+      background: var(--tg-bg-bubble-other);
+      color: var(--tg-text-chat);
+      border-bottom-left-radius: 4px;
+      border: none;
+    }
+
+    .me {
+      align-self: flex-end;
+      background: var(--tg-bg-bubble-me);
+      color: #ffffff;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .msg-name {
+      font-weight: 700;
+      font-size: 12px;
+      color: #7ab9f1;
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .msg-meta {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      margin-top: 4px;
+      float: right;
+      margin-left: 10px;
+    }
+
+    .msg-img {
+      max-width: 100%;
+      border-radius: 8px;
+      margin-top: 8px;
+      display: block;
+      cursor: zoom-in;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    /* ONLINE STATUS */
+    .admin-status-list {
+      margin-top: 20px;
+      padding: 0 16px;
+      border-top: 1px solid var(--tg-border);
+      padding-top: 16px;
+    }
+
+    .admin-status-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--tg-accent);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4caf50; /* Online */
+    }
+
+    .status-dot.offline {
+      background: #7f91a4; /* Offline */
+    }
+
+    .status-name {
+      font-size: 13px;
+      color: var(--tg-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .absensi-toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+      justify-content: center;
+    }
+
+    .absensi-btn {
+      padding: 6px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--tg-accent);
+      background: rgba(82, 136, 193, 0.1);
+      color: var(--tg-accent);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .absensi-btn:hover {
+      background: var(--tg-accent);
+      color: white;
+    }
+
+    .input-container {
+      background: var(--tg-bg-chat);
+      border-radius: 20px;
+      padding: 4px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+
+    #chat-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      padding: 8px 0;
+      font-size: 15px;
+      color: #ffffff;
+    }
+
+    .tg-send-btn {
+      background: none;
+      border: none;
+      color: var(--tg-accent);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s;
+    }
+
+    .tg-send-btn:hover { transform: scale(1.1); }
+
+    /* ABSENSI BOX inside chat */
+    .absensi-box {
+      background: #182533;
+      border-radius: 8px;
+      padding: 12px;
+      width: 100%;
+      max-width: 300px;
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      color: #f5f5f5;
+    }
+
+    .absensi-title {
+      font-weight: 700;
+      color: var(--tg-accent);
+      margin-bottom: 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding-bottom: 4px;
+    }
+
+    .absensi-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      font-size: 13px;
+    }
+
+    .masuk { color: #a6e22e; }
+    .wc     { color: #fd971f; }
+    .makan  { color: #f92672; }
+    .pulang { color: #66d9ef; }
+
+    /* PREVIEW MODAL */
+    .preview-modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(5px);
+    }
+
+    .preview-card {
+      background: #212d3b;
+      width: 90%;
+      max-width: 440px;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .preview-header {
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .preview-header span { font-weight: 700; font-size: 16px; color: #fff; }
+    .preview-close { cursor: pointer; color: #7f91a4; font-size: 20px; }
+
+    .preview-img-box {
+      background: #18222d;
+      padding: 10px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 200px;
+      max-height: 400px;
+    }
+
+    .preview-img-box img {
+      max-width: 100%;
+      max-height: 380px;
+      border-radius: 4px;
+      object-fit: contain;
+    }
+
+    .preview-footer {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .preview-caption-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #1c2732;
+      padding: 8px 12px;
+      border-radius: 20px;
+    }
+
+    .preview-caption-area input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .preview-send-row {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .preview-send-btn {
+      background: #6c78d3;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 6px;
+      font-weight: 700;
+      cursor: pointer;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+
+    .preview-send-btn:hover { background: #5865c3; }
+    .preview-send-btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+  </style>
+</head>
+
+<body>
+
+  <!-- ===== LOGIN PAGE ===== -->
+  <div id="login-page">
+    <div class="login-card">
+      <div class="login-logo">
+        <h2>PayAdmin Chat</h2>
+        <p>Internal Security System</p>
+      </div>
+      <div class="login-error" id="login-error">
+        ⚠ Invalid credentials.
+      </div>
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" id="login-user" placeholder="Enter email..." autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-pass" placeholder="Enter password..." autocomplete="current-password" />
+      </div>
+      <div class="form-group">
+        <label>2FA Code</label>
+        <input type="text" id="login-2fa" placeholder="000000" maxlength="6" style="letter-spacing: 5px; text-align: center; font-weight: 800; border: 2px solid #3b82f6;" />
+      </div>
+
+      <button class="login-btn" onclick="doLogin()">Authenticate</button>
+    </div>
+  </div>
+
+  <!-- === CHAT UI === -->
+  <div id="chat-ui">
+    <!-- SIDEBAR -->
+    <aside class="tg-sidebar">
+      <div class="sidebar-header">
+        <div class="search-bar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7f91a4" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" placeholder="Search" />
+        </div>
+      </div>
+
+      <div class="room-list">
+        <!-- Room 1: Absensi -->
+        <div class="room-item" id="room-absensi" onclick="switchRoom('absensi')">
+          <div class="room-avatar" style="background: #e57373;">📊</div>
+          <div class="room-info">
+            <div class="room-name-row">
+              <span class="room-name">📊 ABSENSI</span>
+              <span class="room-time" id="time-absensi">--:--</span>
+            </div>
+            <div class="room-msg-preview" id="preview-absensi">Session tracking...</div>
+          </div>
+        </div>
+        
+        <!-- Room 2: Reject Failed -->
+        <div class="room-item" id="room-reject" onclick="switchRoom('reject')">
+          <div class="room-avatar" style="background: #ffb74d;">❌</div>
+          <div class="room-info">
+            <div class="room-name-row">
+              <span class="room-name">❌ REJECT FAILED</span>
+              <span class="room-time" id="time-reject">--:--</span>
+            </div>
+            <div class="room-msg-preview" id="preview-reject">Submit error screenshots...</div>
+          </div>
+        </div>
+
+        <!-- Room 3: Worker -->
+        <div class="room-item" id="room-worker" onclick="switchRoom('worker')">
+          <div class="room-avatar" style="background: #64b5f6;">👥</div>
+          <div class="room-info">
+            <div class="room-name-row">
+              <span class="room-name">👥 WORKER GROUP</span>
+              <span class="room-time" id="time-worker">--:--</span>
+            </div>
+            <div class="room-msg-preview" id="preview-worker">Admin discussion...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATUS ADMIN -->
+      <div class="admin-status-list">
+        <div class="admin-status-label">Admin Online</div>
+        <div id="admin-presence-list">
+          <!-- Dinamis dari chat.js -->
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CHAT AREA -->
+    <main class="tg-main-chat">
+      <header class="chat-header">
+        <div class="header-left">
+          <div class="header-title" id="active-room-title">WORKER GROUP</div>
+          <div class="header-subtitle" id="active-room-subtitle">online</div>
+        </div>
+        <div class="header-right">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7f91a4" stroke-width="2" style="cursor:pointer;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </div>
+      </header>
+
+      <div id="chat-box"></div>
+
+      <footer class="tg-chat-footer">
+        <!-- Persistent Absensi Buttons -->
+        <div class="absensi-toolbar" id="absensi-toolbar">
+          <button class="absensi-btn" onclick="sendAction('Masuk Kerja')">Masuk</button>
+          <button class="absensi-btn" onclick="sendAction('Ke WC (15m)')">🏃 WC</button>
+          <button class="absensi-btn" onclick="sendAction('Ke WC (15m)')">🏃 WC</button> 
+          <button class="absensi-btn" onclick="sendAction('Istirahat Makan')">🍴 Makan</button>
+          <button class="absensi-btn" onclick="sendAction('Pulang Kerja')">Pulang</button>
+        </div>
+
+        <!-- Message Input (Hidden in Absensi) -->
+        <div class="input-container" id="msg-input-container">
+          <input type="file" id="file-input" style="display: none;" accept="image/*" onchange="handleFileSelect(event)" />
+          <button class="tg-send-btn" title="Add Attachment" onclick="document.getElementById('file-input').click()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <input id="chat-input" placeholder="Message" autocomplete="off" />
+          <button class="tg-send-btn" onclick="sendMessage()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="m2 21 21-9L2 3v7l15 2-15 2v7z"/></svg>
+          </button>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <!-- IMAGE PREVIEW MODAL -->
+  <div id="image-preview-modal" class="preview-modal">
+    <div class="preview-card">
+      <div class="preview-header">
+        <div class="preview-close" onclick="closePreview()">✕</div>
+        <span>Send Photo</span>
+        <div style="width:20px"></div>
+      </div>
+      <div class="preview-img-box">
+        <img id="preview-img-target" src="" alt="Preview" />
+      </div>
+      <div class="preview-footer">
+        <div class="preview-caption-area">
+          <span style="font-size:20px">😊</span>
+          <input type="text" id="preview-caption" placeholder="Add a caption..." autocomplete="off" />
+        </div>
+        <div class="preview-send-row">
+          <button id="preview-send-btn" class="preview-send-btn" onclick="confirmSendImage()">SEND</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="chat.js"></script>
+</body>
+</html>

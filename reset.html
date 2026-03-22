@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayAdmin — System Reset</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .container {
+            text-align: center;
+            background: #1e293b;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            max-width: 400px;
+            border: 1px solid #334155;
+        }
+        h1 { color: #f43f5e; font-size: 24px; margin-bottom: 10px; }
+        p { color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 25px; }
+        .reset-btn {
+            background: #e11d48;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            font-size: 16px;
+        }
+        .reset-btn:hover { background: #be123c; transform: translateY(-2px); }
+        .reset-btn:disabled { background: #64748b; cursor: not-allowed; opacity: 0.5; }
+        .status { margin-top: 20px; font-size: 12px; text-align: left; max-height: 100px; overflow-y: auto; color: #cbd5e1; }
+        .status div { padding: 4px 0; border-bottom: 1px solid #334155; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <img src="favicon.png" alt="Logo" style="width: 80px; height: 80px; margin-bottom: 20px; border-radius: 12px; filter: grayscale(1) contrast(1.2);">
+    <h1>RESET DATABASE</h1>
+    <p>
+        Tombol ini akan menghapus <strong>SELURUH</strong> data berikut:<br>
+        - Semua Transaksi (History)<br>
+        - Semua Log Aktivitas<br>
+        - Seluruh Pesan Chat & Foto
+    </p>
+    <button id="main-btn" class="reset-btn" onclick="masterReset()">HAFUS SEMUA DATA</button>
+    <div id="status-box" class="status"></div>
+</div>
+
+<script>
+    const SUPABASE_URL = "https://mfuqwfpnzylosqfmmuic.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_pkZOPM-0BRpiLyMdHn8UJA_K4kI8hnx";
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    function log(msg, color = "#cbd5e1") {
+        const box = document.getElementById("status-box");
+        const div = document.createElement("div");
+        div.style.color = color;
+        div.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        box.prepend(div);
+    }
+
+    async function masterReset() {
+        const confirmed = confirm("⚠️ APAKAH ANDA BENAR-BENAR YAKIN? Data yang dihapus tidak bisa dikembalikan!");
+        if (!confirmed) return;
+
+        const doubleConfirmed = prompt("Tulis kata 'HAPUS' (huruf besar) untuk melanjutkan:");
+        if (doubleConfirmed !== "HAPUS") {
+            alert("Sandi salah. Reset dibatalkan.");
+            return;
+        }
+
+        const btn = document.getElementById("main-btn");
+        btn.disabled = true;
+        btn.innerText = "Processing...";
+
+        try {
+            // 1. DELETE TRANSACTION LOGS
+            log("Deleting Transaction Logs...");
+            const { error: err1 } = await sb.from("transaction_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+            if (err1) throw err1;
+
+            // 2. DELETE TRANSACTIONS
+            log("Deleting Transactions...");
+            const { error: err2 } = await sb.from("transactions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+            if (err2) throw err2;
+
+            // 3. DELETE MESSAGES
+            log("Deleting Chat Messages...");
+            const { error: err3 } = await sb.from("messages").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+            if (err3) throw err3;
+
+            // 4. CLEANUP STORAGE (CHAT_IMAGES)
+            log("Cleaning up Storage Bucket 'chat_images'...");
+            const { data: files, error: listError } = await sb.storage.from('chat_images').list();
+            if (listError) {
+                log("Warning: Storage cleanup skipped (bucket maybe empty or not found)", "#eab308");
+            } else if (files && files.length > 0) {
+                const paths = files.map(f => f.name);
+                const { error: delError } = await sb.storage.from('chat_images').remove(paths);
+                if (delError) log("Warning: Storage delete failed: " + delError.message, "#f43f5e");
+                else log(`Storage: ${files.length} images deleted.`, "#10b981");
+            } else {
+                log("Storage: No images found to delete.", "#94a3b8");
+            }
+
+            log("✅ SYSTEM RESET COMPLETE!", "#10b981");
+            alert("Semua data telah dihapus bersih!");
+
+        } catch (err) {
+            console.error(err);
+            log("❌ ERROR: " + err.message, "#f43f5e");
+            alert("Terjadi kesalahan saat reset: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "HAFUS SEMUA DATA";
+        }
+    }
+</script>
+
+</body>
+</html>

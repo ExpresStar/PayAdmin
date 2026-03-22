@@ -79,6 +79,7 @@ let historyPage = 1;
 const HISTORY_LIMIT = 10;
 let selectedBank = null; // for filtering
 let isSearching = false;
+let presenceChannel = null; // ⬅️ Global agar bisa ditutup saat logout
 
 // function jam
 
@@ -568,11 +569,11 @@ async function doLogin() {
   document.getElementById("login-page").style.display = "none";
   document.getElementById("app").style.display = "flex";
 
-  loadTransactions();
   loadDashboardStats();
-  await ensureBanksExist(); // <--- TUNGGU sampai selesai mengisi
+  await ensureBanksExist();
   loadBanks();
   subscribeAppRealtime();
+  initPresence(); // <--- Mulai lacak kehadiran admin
 }
 
 async function ensureBanksExist() {
@@ -611,6 +612,13 @@ document.addEventListener("keydown", (e) => {
 });
 
 function doLogout() {
+  // Tutup jalur presence agar langsung hilang dari daftar "Online"
+  if (presenceChannel) {
+    sb.removeChannel(presenceChannel);
+    presenceChannel = null;
+  }
+
+  if (confirmTargetId || rejectTargetId) handleAutoUnclaim(confirmTargetId ? "modal-confirm" : "modal-reject");
   document.getElementById("app").style.display = "none";
   document.getElementById("login-page").style.display = "flex";
   document.getElementById("login-user").value = "";
@@ -618,6 +626,13 @@ function doLogout() {
   document.getElementById("login-2fa").value = "";
   txCache = [];
 }
+
+// OTOMATIS OFFLINE SAAT TAB DITUTUP
+window.addEventListener('beforeunload', () => {
+  if (presenceChannel) {
+    sb.removeChannel(presenceChannel);
+  }
+});
 
 // ─────────────────────────────────────────────────────
 //  SIDEBAR / NAV / UI CHROME
@@ -749,46 +764,79 @@ function openModal(id) {
 }
 function closeModal(id) {
   document.getElementById(id).classList.remove("open");
+  if (id === "modal-confirm" || id === "modal-reject") {
+    handleAutoUnclaim(id);
+  }
+}
+
+async function handleAutoUnclaim(id) {
+  const uid = id === "modal-confirm" ? confirmTargetId : rejectTargetId;
+  if (!uid) return;
+
+  const { data: latest } = await sb.from('transactions').select('status, assigned_to').eq('id', uid).single();
+  if (latest && latest.status === 'Pending' && latest.assigned_to === currentUser) {
+    await sb.from('transactions').update({ assigned_to: null }).eq('id', uid);
+    if (id === "modal-confirm") confirmTargetId = null;
+    if (id === "modal-reject") rejectTargetId = null;
+    loadTransactions();
+  }
 }
 
 document.addEventListener("click", (e) => {
   if (e.target.classList.contains("modal-overlay"))
-    e.target.classList.remove("open");
+    closeModal(e.target.id);
 });
 
 // ─────────────────────────────────────────────────────
 //  ACTION: CONFIRM CLIENT DATA
 // ─────────────────────────────────────────────────────
 async function openConfirm(uid) {
-  const tx = findTx(uid);
-  if (!tx) return;
-
-
-  // AUTO CLAIM
-  if (!tx.assigned_to) {
-    await sb
-      .from("transactions")
-      .update({ assigned_to: currentUser })
-      .eq("id", tx.id);
-
-    tx.assigned_to = currentUser;
+  // 🔍 1. FRESH DB CHECK: Ambil status terbaru dari database
+  const { data: latest, error } = await sb.from('transactions').select('*').eq('id', uid).single();
+  
+  if (error || !latest) {
+    showNotice("Data tidak ditemukan!", "error");
+    return;
   }
 
-  // VALIDASI
-  if (tx.assigned_to !== currentUser) {
-    showNotice("Already taken by another worker", "error");
+  // 🛡️ 2. CHECK STATUS: Jika sudah diproses orang lain, hentikan
+  if (latest.status !== 'Pending') {
+    showError(`Oops! Transaksi ini sudah <b>${latest.status}</b> oleh <b>${latest.assigned_to || 'admin lain'}</b>.`);
+    loadTransactions();
     return;
+  }
+
+  // 👤 3. CHECK ASSIGNMENT: Jika sudah diambil orang lain, hentikan
+  if (latest.assigned_to && latest.assigned_to !== currentUser) {
+    showError(`Gagal! Data ini sedang diproses oleh <b>${latest.assigned_to}</b>.`);
+    loadTransactions();
+    return;
+  }
+
+  // 📝 4. ATOMIC CLAIM: Tandai data jika belum ada yang ambil
+  if (!latest.assigned_to) {
+    const { error: claimErr } = await sb.from('transactions')
+      .update({ assigned_to: currentUser })
+      .eq('id', uid)
+      .is('assigned_to', null); // Hanya update jika masih kosong di DB
+    
+    if (claimErr) {
+      showError("Gagal mengambil data, mungkin baru saja diambil admin lain.");
+      loadTransactions();
+      return;
+    }
+    latest.assigned_to = currentUser;
   }
 
   confirmTargetId = uid;
   resetModal("confirm");
 
   document.getElementById("confirm-info").innerHTML = `
-    <div>${tx.transaction_id}</div>
+    <div style="font-weight:700; color:#1e3a5f; margin-bottom:5px">${latest.transaction_id}</div>
+    <div style="font-size:12px; color:#64748b">Claimed by: <b>${latest.assigned_to}</b></div>
   `;
 
   openModal("modal-confirm");
-  // Auto-focus so user can Ctrl+V immediately
   requestAnimationFrame(() => document.getElementById("confirm-textarea").focus());
 }
 
@@ -797,71 +845,91 @@ async function doConfirmClient() {
   const note = document.getElementById("confirm-textarea").value.trim();
 
   if (!note) return;
+  confirmTargetId = null; // Prevent handleAutoUnclaim from clearing successful work
   closeModal("modal-confirm");
 
-  // ⚠️ RACE CONDITION PROTECTION: Cek status terakhir di DB
-  const { data: latest } = await sb.from('transactions').select('status, assigned_to').eq('id', uid).single();
-  
-  if (latest && latest.status !== 'Pending') {
-    showError(`Gagal! Data ini sudah diambil/diproses oleh <b>${latest.assigned_to || 'admin lain'}</b>.`);
-    loadTransactions(); // refresh row
-    return;
-  }
-
-  // The original `tx` variable and its `assigned_to` check are now handled by the `latest` check above.
-  // const tx = findTx(confirmTargetId);
-  // if (tx.assigned_to && tx.assigned_to !== currentUser) {
-  //   showError("This transaction is handled by another worker");
-  //   return;
-  // }
-
-  const { error } = await sb
+  // 🛡️ 1. ATOMIC UPDATE (Pintu Terakhir): Only update if still Pending
+  const { data: updated, error: updateErr } = await sb
     .from("transactions")
-    .update({ status: "Completed", completed_time: new Date().toISOString() })
-    .eq("id", confirmTargetId);
+    .update({ 
+      status: "Completed", 
+      completed_time: new Date().toISOString(),
+      assigned_to: currentUser // Re-ensure correct actor in history
+    })
+    .eq("id", uid)
+    .eq("status", "Pending") // Kunci: Hanya jika masih Pending
+    .select();
 
-  if (error) {
-    showError("Update failed: " + error.message);
+  if (updateErr || !updated || updated.length === 0) {
+    // RACE CONDITION DETECTED!
+    const { data: latest } = await sb.from('transactions').select('status, assigned_to').eq('id', uid).single();
+    showError(`Gagal! Transaksi ini baru saja <b>${latest?.status || 'selesai'}</b> oleh <b>${latest?.assigned_to || 'admin lain'}</b>.`);
+    loadTransactions();
     return;
   }
 
+  // 📜 2. LOGGING: Hanya tulis log jika update di atas BERHASIL
   await sb.from("transaction_logs").insert({
-    transaction_id: confirmTargetId,
+    transaction_id: uid,
     action: "Confirmed",
     note: note,
     actor: currentUser,
   });
 
-  showNotice("Transaction confirmed!", "success");
+  showNotice("Transaction confirmed successfully!", "success");
   loadTransactions();
 }
 
 // ─────────────────────────────────────────────────────
 //  ACTION: REJECT
 // ─────────────────────────────────────────────────────
-function openReject(uid) {
-  const tx = findTx(uid);
-  if (!tx) return;
-
-  if (tx.assigned_to && tx.assigned_to !== currentUser) {
-    showNotice("Already taken by another worker", "error");
+async function openReject(uid) {
+  // 🔍 1. FRESH DB CHECK
+  const { data: latest, error } = await sb.from('transactions').select('*').eq('id', uid).single();
+  
+  if (error || !latest) {
+    showNotice("Data tidak ditemukan!", "error");
     return;
   }
 
-  if (tx.status === "Completed") {
-    showError("Transaction is already Completed and cannot be rejected.");
+  // 🛡️ 2. CHECK STATUS
+  if (latest.status !== 'Pending') {
+    showError(`Gagal! Transaksi sudah <b>${latest.status}</b> oleh ${latest.assigned_to || 'admin lain'}`);
+    loadTransactions();
     return;
+  }
+
+  // 👤 3. CHECK ASSIGNMENT
+  if (latest.assigned_to && latest.assigned_to !== currentUser) {
+    showError(`Oops! Data ini sedang dikerjakan oelh <b>${latest.assigned_to}</b>`);
+    loadTransactions();
+    return;
+  }
+
+  // 📝 4. ATOMIC CLAIM
+  if (!latest.assigned_to) {
+    const { error: claimErr } = await sb.from('transactions')
+      .update({ assigned_to: currentUser })
+      .eq('id', uid)
+      .is('assigned_to', null);
+    
+    if (claimErr) {
+      showError("Gagal mengambil data, mungkin barusan diambil orang lain.");
+      loadTransactions();
+      return;
+    }
+    latest.assigned_to = currentUser;
   }
 
   rejectTargetId = uid;
   resetModal("reject");
 
   document.getElementById("reject-info").innerHTML = `
-    ...
+    <div style="font-weight:700; color:#450a0a; margin-bottom:5px">${latest.transaction_id}</div>
+    <div style="font-size:12px; color:#991b1b">Claimed by: <b>${latest.assigned_to}</b></div>
   `;
 
   openModal("modal-reject");
-  // Auto-focus so user can Ctrl+V immediately
   requestAnimationFrame(() => document.getElementById("reject-textarea").focus());
 }
 
@@ -870,40 +938,30 @@ async function confirmReject() {
   const note = document.getElementById("reject-textarea").value.trim();
 
   if (!note) return;
+  rejectTargetId = null; // Clear to prevent unclaim on success
   closeModal("modal-reject");
 
-  // ⚠️ RACE CONDITION PROTECTION
-  const { data: latest } = await sb.from('transactions').select('status, assigned_to').eq('id', uid).single();
-  
-  if (latest && latest.status !== 'Pending') {
-    showError(`Gagal! Data ini sudah diambil/diproses oleh <b>${latest.assigned_to || 'admin lain'}</b>.`);
-    loadTransactions();
-    return;
-  }
-
-  // The original `tx` variable and its `assigned_to` check are now handled by the `latest` check above.
-  // const tx = findTx(rejectTargetId);
-  // if (tx && tx.assigned_to && tx.assigned_to !== currentUser) {
-  //   showError("This transaction is handled by another worker");
-  //   return;
-  // }
-
-  const { error } = await sb
+  // 🛡️ ATOMIC UPDATE
+  const { data: updated, error: updateErr } = await sb
     .from("transactions")
     .update({ 
       status: "Failed", 
       assigned_to: currentUser,
       completed_time: new Date().toISOString() 
     })
-    .eq("id", rejectTargetId);
+    .eq("id", uid)
+    .eq("status", "Pending")
+    .select();
 
-  if (error) {
-    showError("Update failed: " + error.message);
+  if (updateErr || !updated || updated.length === 0) {
+    const { data: latest } = await sb.from('transactions').select('status, assigned_to').eq('id', uid).single();
+    showError(`Gagal Reject! Transaksi sudah <b>${latest?.status || 'selesai'}</b> oleh <b>${latest?.assigned_to || 'admin lain'}</b>.`);
+    loadTransactions();
     return;
   }
 
   await sb.from("transaction_logs").insert({
-    transaction_id: rejectTargetId,
+    transaction_id: uid,
     action: "Rejected",
     note: note,
     actor: currentUser,
@@ -932,33 +990,30 @@ function openCheckNum(uid) {
   setTimeout(() => document.getElementById("checknum-textarea").focus(), 220);
 }
 
-async function confirmCheckNum() {
+async function doCheckNum() {
   const uid = checkTargetId;
   const note = document.getElementById("checknum-textarea").value.trim();
 
   if (!note) return;
   closeModal("modal-checknum");
 
-  // ⚠️ RACE CONDITION PROTECTION
-  const { data: latest } = await sb.from('transactions').select('status, assigned_to').eq('id', uid).single();
+  // FRESH DB CHECK
+  const { data: latest } = await sb.from('transactions').select('status, assigned_to, account_number').eq('id', uid).single();
   
   if (latest && latest.status !== 'Pending') {
-    showError(`Gagal! Data ini sudah diambil/diproses oleh <b>${latest.assigned_to || 'admin lain'}</b>.`);
+    showError(`Gagal Cek! Transaksi sudah <b>${latest.status}</b> oleh <b>${latest.assigned_to}</b>.`);
     loadTransactions();
     return;
   }
 
-  const tx = findTx(uid);
-  if (!tx) return;
-  const inputVal = note; // Use the 'note' variable for the input value
-  const match = inputVal === (tx.account_number || "");
+  const match = note === (latest.account_number || "");
   
   showCheckResult(
     "🔢 Account Number Verification",
     "Transaction No.",
-    tx.account_number || "—",
+    latest.account_number || "—",
     "Input No.",
-    inputVal,
+    note,
     match,
   );
 }
@@ -982,34 +1037,30 @@ function openCheckName(uid) {
   setTimeout(() => document.getElementById("checkname-textarea").focus(), 220);
 }
 
-async function confirmCheckName() {
+async function doCheckName() {
   const uid = checkNameTargetId;
   const note = document.getElementById("checkname-textarea").value.trim();
 
   if (!note) return;
   closeModal("modal-checkname");
 
-  // ⚠️ RACE CONDITION PROTECTION
-  const { data: latest } = await sb.from('transactions').select('status, assigned_to').eq('id', uid).single();
+  // 🔍 1. FRESH DB CHECK
+  const { data: latest, error } = await sb.from('transactions').select('status, assigned_to, account_name').eq('id', uid).single();
   
-  if (latest && latest.status !== 'Pending') {
-    showError(`Gagal! Data ini sudah diambil/diproses oleh <b>${latest.assigned_to || 'admin lain'}</b>.`);
+  if (error || (latest && latest.status !== 'Pending')) {
+    showError(`Gagal Cek! Transaksi sudah <b>${latest?.status || 'selesai'}</b> oleh <b>${latest?.assigned_to || 'admin lain'}</b>.`);
     loadTransactions();
     return;
   }
 
-  const tx = findTx(uid);
-  if (!tx) return;
-  const inputVal = note; // Use the 'note' variable for the input value
-  const match =
-    inputVal.toUpperCase() === (tx.account_name || "").toUpperCase();
+  const match = note.toUpperCase() === (latest.account_name || "").toUpperCase();
   
   showCheckResult(
     "👤 Account Name Verification",
     "Transaction Name",
-    tx.account_name || "—",
+    latest.account_name || "—",
     "Input Name",
-    inputVal,
+    note,
     match,
   );
 }
@@ -1419,8 +1470,8 @@ function generateSmartTransaction() {
   // Normal amount: multiples of 50,000 (e.g. 50k, 100k, 250k)
   let amount = (Math.floor(Math.random() * 50) + 1) * 50000; 
 
-  // 🔥 SIFAT MANUSIA (5% peluang adanya Human Error - sangat jarang)
-  if (Math.random() < 0.05) {
+  // 🔥 SIFAT MANUSIA (4% peluang adanya Human Error - sangat jarang)
+  if (Math.random() < 0.04) {
     const errType = Math.random();
     if (errType < 0.33) {
       // Error 1: Rekening kurang/kelebihan digit (misal cuma 5 angka)
@@ -2063,11 +2114,11 @@ async function processBot() {
       if (s === "failed") failed++;
     });
 
-    // update UI
-    document.querySelectorAll(".stat-card h3")[0].textContent = total;
-    document.querySelectorAll(".stat-card h3")[1].textContent = pending;
-    document.querySelectorAll(".stat-card h3")[2].textContent = completed;
-    document.querySelectorAll(".stat-card h3")[3].textContent = failed;
+    // update UI (Safe ID-based approach)
+    document.getElementById("stat-total-tx").textContent = total;
+    document.getElementById("stat-pending-tx").textContent = pending;
+    document.getElementById("stat-completed-tx").textContent = completed;
+    document.getElementById("stat-failed-tx").textContent = failed;
   }
 
   // auto live update
@@ -2240,6 +2291,52 @@ function showError(msg) {
   if (bodyEl) bodyEl.innerHTML = html;
   
   openModal("modal-report");
+}
+
+function initPresence() {
+  if (presenceChannel) sb.removeChannel(presenceChannel);
+
+  presenceChannel = sb.channel('presence-admins', {
+    config: { presence: { key: currentUser } }
+  });
+
+  presenceChannel
+    .on('presence', { event: 'sync' }, () => {
+      const state = presenceChannel.presenceState();
+      updatePresenceUI(state);
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await presenceChannel.track({
+          user: currentUser,
+          online_at: new Date().toISOString(),
+        });
+      }
+    });
+}
+
+function updatePresenceUI(state) {
+  const listEl = document.getElementById('admin-presence-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+
+  const onlineUsers = Object.keys(state);
+  const uniqueUsers = [...new Set(onlineUsers)];
+
+  uniqueUsers.forEach(user => {
+    const displayName = user.split('@')[0];
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:11px; color:#166534; font-weight:600;';
+    div.innerHTML = `
+      <span style="width:6px; height:6px; border-radius:50%; background:#22c55e;"></span>
+      <span>${displayName}</span>
+    `;
+    listEl.appendChild(div);
+  });
+
+  if (uniqueUsers.length === 0) {
+    listEl.innerHTML = '<div style="font-size:10px; color:#9ca3af;">No other admins online</div>';
+  }
 }
 
 function toggleFilterPanel() {
