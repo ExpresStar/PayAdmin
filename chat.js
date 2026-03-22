@@ -84,6 +84,21 @@ async function doLogin() {
   initRealtime();
 }
 
+// 🔐 AUTO-LOGIN CHECK (Shared Session)
+async function checkExistingSession() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session && session.user) {
+    console.log("Found existing session for:", session.user.email);
+    currentUser = session.user.email;
+    loadAbsensiState();
+    document.getElementById("login-page").style.display = "none";
+    document.getElementById("chat-ui").style.display = "flex";
+    switchRoom('worker');
+    initRealtime();
+  }
+}
+checkExistingSession();
+
 function saveAbsensiState() {
   if (currentUser) {
     localStorage.setItem(`absensi_${currentUser}`, JSON.stringify(absensiState));
