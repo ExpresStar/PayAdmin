@@ -219,11 +219,6 @@ function renderMessage(m) {
     return;
   }
 
-  // 🔒 Di room Absensi: skip pesan milik admin lain
-  if (currentActive === 'absensi' && m.username !== currentUser && m.type === 'bot') {
-    return;
-  }
-
   const box = document.getElementById("chat-box");
   const username = m.username || "Admin";
   const message = m.message || "";
@@ -390,18 +385,12 @@ async function loadMessages() {
     query = query.eq('room', activeRoom.toLowerCase());
   }
   
-  // 🔒 Di room Absensi: hanya tampilkan pesan milik sendiri
-  if (activeRoom === 'absensi') {
-    query = query.eq('username', currentUser);
-  }
-  
   // Ambil 50 pesan TERBARU (descending)
   let { data, error } = await query.order("created_at", { ascending: false }).limit(50);
 
   if (error && error.message.includes('column "room" does not exist')) {
-    // Fallback: ambil semua tapi filter manual
-    const fallback = await sb.from("messages").select("*").order("created_at", { ascending: false }).limit(100);
-    data = fallback.data?.filter(m => m.username === currentUser) ?? [];
+    const fallback = await sb.from("messages").select("*").order("created_at", { ascending: false }).limit(50);
+    data = fallback.data;
     error = fallback.error;
   }
 
