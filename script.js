@@ -657,7 +657,6 @@ function switchPage(page, el) {
     transactions: "Transaction Management",
     banks: "Bank Management",
     reports: "Reports",
-    chat: "Internal Chat",
   };
   document.getElementById("topbar-page-name").textContent = names[page] || page;
   if (page === "history") {
