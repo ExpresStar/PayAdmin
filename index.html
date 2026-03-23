@@ -479,12 +479,94 @@
                 >
                   ↺
                 </button>
-                <input
-                  type="text"
-                  id="history-search"
-                  placeholder="Search admin..."
-                  oninput="loadHistory()"
-                />
+              </div>
+            </div>
+
+            <!-- FILTERS -->
+            <div class="filter-panel" id="history-filter-panel">
+              <div class="filter-grid">
+                <div class="filter-item">
+                  <label>Transaction ID</label>
+                  <input type="text" id="h-txid" placeholder="Search Txn ID..." />
+                </div>
+                <div class="filter-item">
+                  <label>Origin Order ID</label>
+                  <input
+                    type="text"
+                    id="h-orderid"
+                    placeholder="Search Order ID..."
+                  />
+                </div>
+                <div class="filter-item">
+                  <label>Status</label>
+                  <select id="h-status">
+                    <option value="">All Status</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Failed">Failed</option>
+                  </select>
+                </div>
+                <div class="filter-item">
+                  <label>Bank</label>
+                  <select id="h-bank">
+                    <option value="">All Banks</option>
+                    <option>Vietcombank</option>
+                    <option>Techcombank</option>
+                    <option>MB Bank</option>
+                    <option>ACB</option>
+                    <option>BIDV</option>
+                    <option>VPBank</option>
+                    <option>VietinBank</option>
+                    <option>OCB</option>
+                    <option>MSB</option>
+                    <option>LPBank</option>
+                    <option>Sacombank</option>
+                    <option>SHB</option>
+                    <option>TPBank</option>
+                  </select>
+                </div>
+
+                <div class="filter-item">
+                  <label>Date From</label>
+                  <input type="date" id="h-date-from" />
+                </div>
+                <div class="filter-item">
+                  <label>Date To</label>
+                  <input type="date" id="h-date-to" />
+                </div>
+                <div class="filter-item">
+                  <label>Account Number</label>
+                  <input
+                    type="text"
+                    id="h-accnum"
+                    placeholder="Account number..."
+                  />
+                </div>
+                <div class="filter-item">
+                  <label>Account Name</label>
+                  <input
+                    type="text"
+                    id="h-accname"
+                    placeholder="Account name..."
+                  />
+                </div>
+              </div>
+
+              <div class="filter-buttons">
+                <button class="fbtn fbtn-search" onclick="searchHistory()">
+                  🔍 Search
+                </button>
+                <button class="fbtn fbtn-reset" onclick="resetHistoryFilters()">
+                  ↺ Reset
+                </button>
+                <button class="fbtn fbtn-today" onclick="filterHistoryToday()">
+                  📅 Today
+                </button>
+                <button
+                  class="fbtn fbtn-yesterday"
+                  onclick="filterHistoryYesterday()"
+                >
+                  📅 Yesterday
+                </button>
               </div>
             </div>
 
@@ -795,34 +877,6 @@
             onclick="closeModal('modal-checkname')"
           >
             Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── DETAIL MODAL (view only — no textarea required) ── -->
-    <div class="modal-overlay" id="modal-detail">
-      <div class="modal" style="max-width: 520px">
-        <div class="modal-header">
-          <div class="modal-title-wrap">
-            <span
-              class="modal-title-icon"
-              style="background: #eff6ff; color: #1d4ed8"
-              >🔍</span
-            >
-            <span class="modal-title">Transaction Detail</span>
-          </div>
-          <button class="modal-close" onclick="closeModal('modal-detail')">
-            ✕
-          </button>
-        </div>
-        <div class="modal-body" id="detail-body"></div>
-        <div class="modal-footer">
-          <button
-            class="modal-btn modal-btn-primary"
-            onclick="closeModal('modal-detail')"
-          >
-            Close
           </button>
         </div>
       </div>
