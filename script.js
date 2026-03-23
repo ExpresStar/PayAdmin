@@ -17,7 +17,8 @@ const SUPABASE_KEY = "sb_publishable_pkZOPM-0BRpiLyMdHn8UJA_K4kI8hnx";
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const WORKERS = ["anan78", "xiaoxian99", "xiaoting99", "yaer78", "bobi908"];
+// Bots (also used as `assigned_to` + chat username)
+const WORKERS = []; // processing bots disabled; data generator still runs
 
 // ─────────────────────────────────────────────────────
 //  FIELD MAP  (exact Supabase column names from schema)
@@ -89,11 +90,28 @@ function getCurrentHour() {
 }
 
 function getTrafficConfig() {
-  // SELALU CEPAT (Sesuai permintaan user: 2-4 detik)
-  return {
-    insertDelay: [2000, 4000], 
-    processDelay: [5000, 15000], 
-  };
+  const h = new Date().getHours(); // local time (assumed WIB on client)
+
+  // Dinamis: jam ramai lebih cepat, jam sepi lebih lambat
+  if (h >= 8 && h < 22) {
+    // Peak hours: 08:00-21:59
+    return {
+      insertDelay: [1200, 2400],   // 1.2s - 2.4s antar transaksi baru
+      processDelay: [4000, 9000],  // 4s - 9s untuk alur proses
+    };
+  } else if (h >= 6 && h < 8 || h >= 22 && h < 24) {
+    // Shoulder hours: 06:00-07:59 & 22:00-23:59
+    return {
+      insertDelay: [2500, 4200],
+      processDelay: [7000, 14000],
+    };
+  } else {
+    // Quiet hours: 00:00-05:59
+    return {
+      insertDelay: [4500, 8000],
+      processDelay: [10000, 18000],
+    };
+  }
 }
 
 // ─────────────────────────────────────────────────────
@@ -229,6 +247,330 @@ function getProofUrl(tx) {
 }
 
 // ─────────────────────────────────────────────────────
+//  BOT HELPERS — proof mismatch + reject screenshot
+// ─────────────────────────────────────────────────────
+function normalizeNameForCompare(s) {
+  // Make "human" string compare more tolerant (spaces/diacritics/case)
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-zA-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function getProofFieldsFromTx(tx) {
+  const proofUrl = getProofUrl(tx);
+  const qs = proofUrl.split("?")[1] || "";
+  const params = new URLSearchParams(qs);
+  return {
+    name: params.get("name") || "",
+    bank: params.get("bank") || "",
+    amount: Number(params.get("amount") || 0),
+  };
+}
+
+function getTxMismatch(tx) {
+  const proof = getProofFieldsFromTx(tx);
+
+  const txAmount = Number(tx.amount || 0);
+  const wrongNominal = Number(proof.amount || 0) !== txAmount;
+  const wrongName =
+    normalizeNameForCompare(proof.name) !==
+    normalizeNameForCompare(tx.account_name || "");
+  const wrongBank = String(proof.bank || "") !== String(tx.bank_name || "");
+
+  const anyWrong = wrongNominal || wrongName || wrongBank;
+
+  return {
+    proof,
+    wrongNominal,
+    wrongName,
+    wrongBank,
+    anyWrong,
+    note: [
+      wrongNominal ? "Nominal" : null,
+      wrongName ? "Name" : null,
+      wrongBank ? "Bank" : null,
+    ]
+      .filter(Boolean)
+      .join(", "),
+  };
+}
+
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+}
+
+function renderRejectScreenshotCanvas(tx, mismatch, botName) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 980;
+  canvas.height = 270;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+
+  // Background
+  ctx.fillStyle = "#1e3a5f";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Card
+  const cardX = 18;
+  const cardY = 18;
+  const cardW = canvas.width - 36;
+  const cardH = canvas.height - 36;
+
+  ctx.fillStyle = "#ffffff";
+  drawRoundedRect(ctx, cardX, cardY, cardW, cardH, 14);
+  ctx.fill();
+
+  // Header
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "800 16px Inter, Arial, sans-serif";
+  ctx.fillText("TRANSACTION MGMT (WRONG DATA)", cardX + 20, cardY + 32);
+
+  ctx.fillStyle = "#64748b";
+  ctx.font = "600 12px Inter, Arial, sans-serif";
+  ctx.fillText(`Bot: ${botName}`, cardX + 20, cardY + 52);
+
+  // Table header row
+  const startX = cardX + 20;
+  let y = cardY + 82;
+  ctx.font = "700 11px Inter, Arial, sans-serif";
+  ctx.fillStyle = "#6b7280";
+  const headers = [
+    ["Transaction", startX, y],
+    ["Acc No", startX + 270, y],
+    ["Name", startX + 400, y],
+    ["Bank", startX + 640, y],
+    ["Amount", startX + 785, y],
+  ];
+  headers.forEach(([t, hx, hy]) => ctx.fillText(t, hx, hy));
+
+  // Values row
+  y += 20;
+  ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+  ctx.fillStyle = mismatch.wrongNominal ? "#dc2626" : "#0f172a";
+  ctx.fillText(String(tx.transaction_id || ""), startX, y);
+
+  ctx.fillStyle = mismatch.wrongBank ? "#dc2626" : "#0f172a";
+  ctx.fillText(String(tx.account_number || ""), startX + 270, y);
+
+  ctx.fillStyle = mismatch.wrongName ? "#dc2626" : "#0f172a";
+  ctx.fillText(String(tx.account_name || ""), startX + 400, y);
+
+  ctx.fillStyle = mismatch.wrongBank ? "#dc2626" : "#0f172a";
+  ctx.fillText(String(tx.bank_name || ""), startX + 640, y);
+
+  ctx.fillStyle = mismatch.wrongNominal ? "#dc2626" : "#0f172a";
+  ctx.fillText(String(fmtAmount(tx.amount || 0)).replace(" VND", ""), startX + 785, y);
+
+  // Proof mismatch hints
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "800 12px Inter, Arial, sans-serif";
+  ctx.fillText("Proof says:", startX, y + 28);
+
+  ctx.font = "600 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+  const proofLine = `Nominal=${mismatch.proof.amount} | Name=${mismatch.proof.name} | Bank=${mismatch.proof.bank}`;
+  ctx.fillStyle = "#334155";
+  ctx.fillText(proofLine.slice(0, 86) + (proofLine.length > 86 ? "…" : ""), startX + 8, y + 28);
+
+  // Wrong badge
+  ctx.fillStyle = "#fef2f2";
+  drawRoundedRect(ctx, cardX + cardW - 210, cardY + 16, 190, 46, 12);
+  ctx.fill();
+  ctx.strokeStyle = "#ef4444";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = "#dc2626";
+  ctx.font = "900 14px Inter, Arial, sans-serif";
+  ctx.fillText("WRONG", cardX + cardW - 162, cardY + 46);
+  ctx.font = "700 11px Inter, Arial, sans-serif";
+  ctx.fillText(mismatch.note || "Mismatch", cardX + cardW - 158, cardY + 63);
+
+  return canvas;
+}
+
+function canvasToPngBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    try {
+      canvas.toBlob((blob) => {
+        if (!blob) reject(new Error("canvas.toBlob failed"));
+        else resolve(blob);
+      }, "image/png");
+    } catch (e) {
+      // Fallback for older browsers
+      try {
+        const dataUrl = canvas.toDataURL("image/png");
+        const byteString = atob(dataUrl.split(",")[1]);
+        const mimeString = dataUrl.split(",")[0].split(":")[1].split(";")[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        resolve(new Blob([ab], { type: mimeString }));
+      } catch (err) {
+        reject(err);
+      }
+    }
+  });
+}
+
+async function uploadCanvasAsChatImage(canvas, fileName) {
+  const blob = await canvasToPngBlob(canvas);
+  const filePath = `chat_images/${fileName}`;
+
+  const { error: uploadError } = await sb.storage.from("chat_images").upload(filePath, blob);
+  if (uploadError) throw uploadError;
+
+  const { data } = sb.storage.from("chat_images").getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
+async function insertChatMessage({ room, username, type, message }) {
+  // Primary: with room column (if exists)
+  try {
+    const { error } = await sb.from("messages").insert([{ room, username, type, message }]);
+    if (error) throw error;
+    return;
+  } catch (err) {
+    // Fallback: without room
+    const { error: err2 } = await sb.from("messages").insert([{ username, type, message }]);
+    if (err2) throw err2;
+  }
+}
+
+async function botSendRejectSequence(botName, tx, mismatch, slowMultiplier = 1) {
+  // 1) screenshot
+  const canvas = renderRejectScreenshotCanvas(tx, mismatch, botName);
+  const fileName = `reject-bot-${tx.id}-${Date.now()}.png`;
+  const imageUrl = await uploadCanvasAsChatImage(canvas, fileName);
+
+  await insertChatMessage({
+    room: "reject",
+    username: botName,
+    type: "image",
+    message: `${imageUrl}|--CAPTION--|${tx.transaction_id || tx.id}`,
+  });
+
+  await new Promise((r) => setTimeout(r, (600 + Math.random() * 900) * slowMultiplier));
+
+  // 2) detail text: account no - bank
+  const detailText = `${tx.account_number || "—"} - ${mismatch.proof.bank || "—"}`;
+  await insertChatMessage({
+    room: "reject",
+    username: botName,
+    type: "user",
+    message: detailText,
+  });
+
+  await new Promise((r) => setTimeout(r, (650 + Math.random() * 1100) * slowMultiplier));
+
+  // 3) NB message (after photo + detail)
+  const bil = fmtAmount(mismatch.proof.amount || 0);
+  const nm = mismatch.proof.name || "—";
+  const bk = mismatch.proof.bank || "—";
+
+  const nbHtml = `
+    NB :<br><br>
+    <pre style="margin:0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space:pre-wrap; font-size:12px">
+&gt; SALAH NOMINAL: [${mismatch.wrongNominal ? bil : "-"}]
+&gt; SALAH NAMA : [${mismatch.wrongName ? nm : "-"}]
+&gt; SALAH BANK: [${mismatch.wrongBank ? bk : "-"}]
+    </pre>
+  `;
+
+  await insertChatMessage({
+    room: "reject",
+    username: botName,
+    type: "user",
+    message: nbHtml,
+  });
+}
+
+let _botWorkTickRunning = false;
+
+async function botProcessPendingTick() {
+  if (!WORKERS.length) return; // bot disabled
+  if (_botWorkTickRunning) return;
+  _botWorkTickRunning = true;
+
+  try {
+    // pick the oldest pending item to process next
+    const { data: pendingBatch } = await sb
+      .from("transactions")
+      .select("id,status,transaction_id,account_number,account_name,bank_name,amount,created_at")
+      .eq("status", "Pending")
+      .is("assigned_to", null)
+      // oldest first
+      .order("created_at", { ascending: true })
+      // process one at a time to avoid over-speed
+      .limit(1);
+
+    if (!pendingBatch || pendingBatch.length === 0) return;
+
+    const nowIso = new Date().toISOString();
+
+    for (const tx of pendingBatch) {
+      const botName = WORKERS[Math.floor(Math.random() * WORKERS.length)];
+      const mismatch = getTxMismatch(tx);
+      const isReject = mismatch.anyWrong;
+
+      const updateData = isReject
+        ? { assigned_to: botName, status: "Failed", completed_time: nowIso }
+        : { assigned_to: botName, status: "Completed", completed_time: nowIso, process_time: nowIso };
+
+      const { data: updated, error } = await sb
+        .from("transactions")
+        .update(updateData)
+        .eq("id", tx.id)
+        .eq("status", "Pending")
+        .is("assigned_to", null)
+        .select();
+
+      if (error || !updated || updated.length === 0) continue;
+
+      // slow down per transaction to feel human
+      await new Promise(r => setTimeout(r, 3000 + Math.random() * 4000));
+
+      await sb.from("transaction_logs").insert({
+        transaction_id: tx.id,
+        action: isReject ? "Rejected" : "Confirmed",
+        note: isReject ? `Auto reject by bot: ${mismatch.note || "Mismatch"}` : "Auto confirm by bot",
+        actor: botName,
+      });
+
+      if (isReject) {
+        // Send evidence to chat reject room
+        await botSendRejectSequence(botName, targetMismatchAnyPatch(tx), mismatch, 1);
+      } else {
+        // Announce approval to worker chat
+        await insertChatMessage({
+          room: "worker",
+          username: botName,
+          type: "user",
+          message: `✅ ${tx.transaction_id || tx.id} approved`,
+        });
+      }
+    }
+  } finally {
+    _botWorkTickRunning = false;
+  }
+}
+
+function targetMismatchAnyPatch(tx) {
+  // Ensure tx has fields needed by renderer (some queries might omit them)
+  return tx;
+}
+
+// ─────────────────────────────────────────────────────
 //  CORE DATA LAYER
 // ─────────────────────────────────────────────────────
 async function loadTransactions() {
@@ -360,7 +702,6 @@ function renderTable(rows) {
       const rejectBtn = isActive
         ? `<button class="abtn abtn-reject" onclick="openReject('${uid}')">✎ Reject</button>`
         : "";
-      const detailBtn = `<button class="abtn abtn-detail" onclick="openDetail('${uid}')">✎ Detail</button>`;
       const proofBtn = `<a href="${getProofUrl(tx)}" target="_blank"><button class="abtn abtn-proof">✎ Proof</button></a>`;
       const checkNumBtn = `<button class="abtn abtn-checknum"  onclick="openCheckNum('${uid}')">✎ Chk No.</button>`;
       const checkNameBtn = `<button class="abtn abtn-checkname" onclick="openCheckName('${uid}')">✎ Chk Name</button>`;
@@ -386,7 +727,7 @@ function renderTable(rows) {
       <td style="text-align:center">${fmtTime(completedAt)}</td>
       <td>
         <div class="action-group">
-          ${confirmBtn}${rejectBtn}${detailBtn}${proofBtn}
+          ${confirmBtn}${rejectBtn}${proofBtn}
         </div>
       </td>
       <td>
@@ -581,6 +922,7 @@ async function doLogin() {
   await ensureBanksExist();
   loadBanks();
   subscribeAppRealtime();
+  startDashboardPolling();
   initPresence(); // <--- Mulai lacak kehadiran admin
 }
 
@@ -1014,7 +1356,8 @@ async function doCheckNum() {
     return;
   }
 
-  const match = note === (latest.account_number || "");
+  const normDigits = (s) => String(s || "").replace(/\D/g, "");
+  const match = normDigits(note) === normDigits(latest?.account_number || "");
   
   showCheckResult(
     "🔢 Account Number Verification",
@@ -1061,7 +1404,16 @@ async function doCheckName() {
     return;
   }
 
-  const match = note.toUpperCase() === (latest.account_name || "").toUpperCase();
+  const normName = (s) =>
+    String(s || "")
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[^a-zA-Z0-9 ]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toUpperCase();
+
+  const match = normName(note) === normName(latest?.account_name || "");
   
   showCheckResult(
     "👤 Account Name Verification",
@@ -1095,37 +1447,7 @@ function showCheckResult(title, labelA, valA, labelB, valB, match) {
   openModal("modal-result");
 }
 
-// ─────────────────────────────────────────────────────
-//  DETAIL MODAL  (view-only, no textarea)
-// ─────────────────────────────────────────────────────
-function openDetail(uid) {
-  const tx = findTx(uid);
-  if (!tx) return;
-  document.getElementById("detail-body").innerHTML = `
-    <table class="detail-table">
-      <tr><th>Transaction ID</th><td style="font-family:monospace;font-size:10px">${tx.transaction_id || uid}</td></tr>
-      <tr><th>Order ID</th><td style="font-family:monospace;font-size:10px">${tx.order_id || "—"}</td></tr>
-      <tr><th>Account Number</th><td style="font-family:monospace">${tx.account_number || "—"}</td></tr>
-      <tr><th>Account Name</th><td><strong>${tx.account_name || "—"}</strong></td></tr>
-      <tr><th>Amount</th><td><strong style="color:#1a7dc4;font-size:14px">${fmtAmount(tx.amount)}</strong></td></tr>
-      <tr><th>Bank</th><td>${tx.bank_name || "—"} <span style="color:#9ca3af">(${shortBank(tx.bank_name)})</span></td></tr>
-      <tr><th>Status</th><td>${statusBadge(tx.status)}</td></tr>
-      <tr><th>Source</th><td>${tx.source ? `<span class="badge badge-source">${tx.source}</span>` : "—"}</td></tr>
-      <tr><th>Created At</th><td>${tx.created_at ? new Date(tx.created_at).toLocaleString() : "—"}</td></tr>
-      <tr><th>Process Time</th><td>${
-        tx.process_time
-          ? new Date(tx.process_time)
-              .toLocaleString("id-ID", {
-                timeZone: "Asia/Jakarta",
-              })
-              .toLocaleString()
-          : "—"
-      }</td></tr>
-      <tr><th>Completed At</th><td>${tx.completed_time ? new Date(tx.completed_time).toLocaleString() : "—"}</td></tr>
-    </table>`;
-  openModal("modal-detail");
-}
-
+// (Detail modal removed as requested)
 // ─────────────────────────────────────────────────────
 //  ERROR MODAL (REPLACED BY IMPROVED VERSION)
 // ─────────────────────────────────────────────────────
@@ -1175,6 +1497,55 @@ const BANK_LOGO = {
 };
 
 // HISTORY
+function searchHistory() {
+  historyPage = 1;
+  loadHistory();
+}
+
+function resetHistoryFilters() {
+  const ids = [
+    "h-txid",
+    "h-orderid",
+    "h-status",
+    "h-bank",
+    "h-date-from",
+    "h-date-to",
+    "h-accnum",
+    "h-accname",
+  ];
+
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+
+  historyPage = 1;
+  loadHistory();
+}
+
+function filterHistoryToday() {
+  const today = getLocalDate();
+  const fromEl = document.getElementById("h-date-from");
+  const toEl = document.getElementById("h-date-to");
+  if (fromEl) fromEl.value = today;
+  if (toEl) toEl.value = today;
+
+  historyPage = 1;
+  loadHistory();
+}
+
+function filterHistoryYesterday() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const y = getLocalDate(d);
+  const fromEl = document.getElementById("h-date-from");
+  const toEl = document.getElementById("h-date-to");
+  if (fromEl) fromEl.value = y;
+  if (toEl) toEl.value = y;
+
+  historyPage = 1;
+  loadHistory();
+}
 
 async function loadHistory() {
   const tbody = document.getElementById("history-tbody");
@@ -1185,17 +1556,36 @@ async function loadHistory() {
   const from = (historyPage - 1) * HISTORY_LIMIT;
   const to = from + HISTORY_LIMIT - 1;
 
-  const keyword =
-    document.getElementById("history-search")?.value.toLowerCase() || "";
+  const fTxId = (document.getElementById("h-txid")?.value || "").trim();
+  const fOrderId = (document.getElementById("h-orderid")?.value || "").trim();
+  const fStatus = (document.getElementById("h-status")?.value || "").trim();
+  const fBank = (document.getElementById("h-bank")?.value || "").trim();
+  const fDateFrom = (document.getElementById("h-date-from")?.value || "").trim();
+  const fDateTo = (document.getElementById("h-date-to")?.value || "").trim();
+  const fAccNum = (document.getElementById("h-accnum")?.value || "").trim();
+  const fAccName = (document.getElementById("h-accname")?.value || "").trim();
 
   let query = sb
     .from("transactions")
     .select("*", { count: "exact" })
     .in("status", ["Completed", "Failed"]);
 
-  // ✅ FILTER PINDAH KE DATABASE
-  if (keyword) {
-    query = query.ilike("assigned_to", `%${keyword}%`);
+  // ✅ FILTER KE DATABASE
+  if (fTxId) query = query.ilike("transaction_id", `%${fTxId}%`);
+  if (fOrderId) query = query.ilike("order_id", `%${fOrderId}%`);
+  if (fAccNum) query = query.ilike("account_number", `%${fAccNum}%`);
+  if (fAccName) query = query.ilike("account_name", `%${fAccName}%`);
+  if (fStatus) query = query.eq("status", fStatus);
+  if (fBank) query = query.eq("bank_name", fBank);
+
+  // ✅ FILTER DATE (local laptop -> UTC boundary)
+  if (fDateFrom) {
+    const localStart = new Date(fDateFrom + "T00:00:00");
+    query = query.gte("completed_time", localStart.toISOString());
+  }
+  if (fDateTo) {
+    const localEnd = new Date(fDateTo + "T23:59:59");
+    query = query.lte("completed_time", localEnd.toISOString());
   }
 
   const { data, error, count } = await query
@@ -1401,26 +1791,76 @@ async function loadAdminStats() {
   console.log("ADMIN STATS:", stats);
 }
 
-function openDetailFromHistory(tx) {
-  document.getElementById("detail-body").innerHTML = `
-    <table class="detail-table">
-      <tr><th>Transaction ID</th><td>${tx.transaction_id || "—"}</td></tr>
-      <tr><th>Order ID</th><td>${tx.order_id || "—"}</td></tr>
-      <tr><th>Account Number</th><td>${tx.account_number || "—"}</td></tr>
-      <tr><th>Account Name</th><td><strong>${tx.account_name || "—"}</strong></td></tr>
-      <tr><th>Amount</th><td><strong>${fmtAmount(tx.amount)}</strong></td></tr>
-      <tr><th>Bank</th><td>${tx.bank_name || "—"}</td></tr>
-      <tr><th>Status</th><td>${statusBadge(tx.status)}</td></tr>
-      <tr><th>Created</th><td>${fmtTime(tx.created_at)}</td></tr>
-      <tr><th>Process Time</th><td>${fmtTime(tx.process_time)}</td></tr>
-      <tr><th>Completed</th><td>${fmtTime(tx.completed_time)}</td></tr>
-    </table>
-  `;
-
-  openModal("modal-detail");
-}
+// (Detail modal removed as requested)
 
 // ai generate data klien
+
+function randomUUIDLike() {
+  // Prefer built-in UUID (modern browsers). Fallback for older environments.
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  } catch (_) {}
+  return (
+    "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return Math.floor(v).toString(16);
+    }) + "-" + Date.now().toString(36)
+  );
+}
+
+function randomDigits(len) {
+  const out = [];
+  // Use cryptographically stronger randomness when possible.
+  try {
+    if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+      const arr = new Uint8Array(len);
+      crypto.getRandomValues(arr);
+      for (let i = 0; i < arr.length; i++) out.push(String(arr[i] % 10));
+      return out.join("");
+    }
+  } catch (_) {}
+
+  for (let i = 0; i < len; i++) out.push(String(Math.floor(Math.random() * 10)));
+  return out.join("");
+}
+
+async function txValueExists(field, value) {
+  const { data, error } = await sb
+    .from("transactions")
+    .select("id")
+    .eq(field, value)
+    .limit(1);
+
+  if (error) return false; // fail-open to avoid blocking the bot UI
+  return !!(data && data.length);
+}
+
+async function generateSmartTransactionUnique(maxTries = 25) {
+  // Strictly try to avoid duplicates for: transaction_id, account_number, account_name.
+  for (let i = 0; i < maxTries; i++) {
+    const tx = generateSmartTransaction();
+    const normalizedName = (tx.account_name || "").replace(/\s+/g, " ").trim();
+    tx.account_name = normalizedName;
+
+    const [idExists, numExists, nameExists] = await Promise.all([
+      txValueExists("transaction_id", tx.transaction_id),
+      txValueExists("account_number", tx.account_number),
+      txValueExists("account_name", tx.account_name),
+    ]);
+
+    if (!idExists && !numExists && !nameExists) return tx;
+  }
+
+  // Fallback: force uniqueness on the name if DB already has collisions.
+  const tx = generateSmartTransaction();
+  const safeSuffix = randomDigits(4);
+  tx.account_name = `${(tx.account_name || "Client").replace(/\s+/g, " ").trim()} ${safeSuffix}`;
+  tx.transaction_id =
+    "TX" + randomUUIDLike().replace(/-/g, "").slice(0, 16).toUpperCase();
+  tx.account_number = "0" + randomDigits(9);
+  return tx;
+}
 
 function generateSmartTransaction() {
   const firstNames = [
@@ -1432,8 +1872,72 @@ function generateSmartTransaction() {
     "Phan",
     "Vu",
     "Dang",
+    "Bui",
+    "Do",
+    "Dao",
+    "Huynh",
+    "Ngo",
+    "Vo",
+    "Mai",
+    "Ly",
+    "Truong",
+    "Dinh",
+    "Ta",
+    "Kieu",
+    "Trinh",
+    "Giau",
   ];
-  const middleNames = ["Van", "Thi", "Duc", "Minh", "Huu", "Ngoc"];
+
+  // "Middle name" / given syllables in common VN full-name format.
+  const middleNames = [
+    "Van",
+    "Thi",
+    "Duc",
+    "Minh",
+    "Huu",
+    "Ngoc",
+    "Anh",
+    "Bao",
+    "Binh",
+    "Chau",
+    "Duy",
+    "Gia",
+    "Giang",
+    "Hai",
+    "Ha",
+    "Hanh",
+    "Hien",
+    "Khanh",
+    "Khoa",
+    "Lam",
+    "Linh",
+    "Long",
+    "Loi",
+    "Manh",
+    "Man",
+    "Nam",
+    "Nhat",
+    "Ngoc",
+    "Phuc",
+    "Phuong",
+    "Quang",
+    "Quyen",
+    "Quynh",
+    "San",
+    "Son",
+    "Thao",
+    "Thang",
+    "Thien",
+    "Thinh",
+    "Tien",
+    "Tuan",
+    "Tuyen",
+    "Uyen",
+    "Vy",
+    "Xuan",
+    "Yen",
+  ];
+
   const lastNames = [
     "Anh",
     "Binh",
@@ -1445,6 +1949,54 @@ function generateSmartTransaction() {
     "Linh",
     "Nam",
     "Phong",
+    "Phuc",
+    "Quang",
+    "Quyen",
+    "Quynh",
+    "Son",
+    "Tam",
+    "Thao",
+    "Tien",
+    "Tuan",
+    "Tuyen",
+    "Uyen",
+    "Vy",
+    "Xuan",
+    "Yen",
+    "Bao",
+    "Cong",
+    "Duy",
+    "Duc",
+    "Hai",
+    "Hieu",
+    "Hiep",
+    "Hien",
+    "Hoa",
+    "Huong",
+    "Hung",
+    "Khoa",
+    "Khang",
+    "Khanh",
+    "Khanh",
+    "Lam",
+    "Long",
+    "Manh",
+    "Minh",
+    "My",
+    "Ngoc",
+    "Nhan",
+    "Nguyen",
+    "Oanh",
+    "Phuong",
+    "Phuong",
+    "Quoc",
+    "Quoc",
+    "San",
+    "Thinh",
+    "Thinh",
+    "Thu",
+    "Trang",
+    "Trieu",
   ];
 
   const banks = [
@@ -1473,7 +2025,9 @@ function generateSmartTransaction() {
 
   let bank = banks[Math.floor(Math.random() * banks.length)];
 
-  let accNum = "0" + Math.floor(100000000 + Math.random() * 900000000);
+  // Generate a numeric account number with a fixed length.
+  // (Using crypto randomness to avoid repeated values when auto bot inserts fast.)
+  let accNum = "0" + randomDigits(9);
   
   // Normal amount: multiples of 50,000 (e.g. 50k, 100k, 250k)
   let amount = (Math.floor(Math.random() * 50) + 1) * 50000; 
@@ -1506,8 +2060,9 @@ function generateSmartTransaction() {
   const process = new Date(lastTime);
 
   const tx = {
-    transaction_id: "TX" + Date.now(),
-    order_id: "ORD" + Math.floor(Math.random() * 1000000),
+    transaction_id:
+      "TX" + randomUUIDLike().replace(/-/g, "").slice(0, 16).toUpperCase(),
+    order_id: "ORD" + randomDigits(8),
     account_number: accNum,
     account_name: name,
     bank_name: bank,
@@ -1522,7 +2077,7 @@ function generateSmartTransaction() {
 }
 
 async function autoInsertTransaction() {
-  const tx = generateSmartTransaction();
+  const tx = await generateSmartTransactionUnique();
 
   console.log("INSERT DATA:", tx);
 
@@ -1983,7 +2538,7 @@ async function runBot() {
 
 async function processBot() {
   // 1. generate transaksi
-  const tx = generateSmartTransaction();
+  const tx = await generateSmartTransactionUnique();
 
   const { data, error } = await sb
     .from("transactions")
@@ -1997,6 +2552,12 @@ async function processBot() {
 
   // ⏱️ delay sebelum assign
   await new Promise((r) => setTimeout(r, 3000 + Math.random() * 7000));
+
+  // Jika bot processing dimatikan, biarkan Pending tanpa assigned_to
+  if (!WORKERS.length) {
+    console.log("BOT: workers disabled, leave pending");
+    return;
+  }
 
   // 2. assign worker
   const worker = WORKERS[Math.floor(Math.random() * WORKERS.length)];
@@ -2140,6 +2701,13 @@ async function processBot() {
       .subscribe();
   }
 
+  // fallback polling untuk dashboard bila realtime tidak tersinkron
+  let _dashPoll;
+  function startDashboardPolling() {
+    if (_dashPoll) clearInterval(_dashPoll);
+    _dashPoll = setInterval(() => loadDashboardStats(), 5000);
+  }
+
   // refresh dashboard
 
 
@@ -2250,6 +2818,8 @@ function startBotAutomationLoop() {
 
     if (isBotRunning && botHost === currentUser) {
       await autoInsertTransaction();
+      // After inserting new transactions, process queue (approve correct, reject mismatched)
+      await botProcessPendingTick();
       setTimeout(loop, delay); // Run next tick
     } else {
       console.log("🤖 Loop stopped. Status:", isBotRunning, "Host:", botHost);
