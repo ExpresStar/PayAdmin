@@ -13,6 +13,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let currentUser = ""; 
 let activeRoom = "worker"; // default room
 let presenceChannel = null; // ⬅️ Global agar bisa ditutup saat logout
+let roomsSupported = true; // fallback if messages table has no "room" column
 let absensiState = {
   masuk: null,
   wc: 0,
@@ -30,6 +31,9 @@ const ROOM_NAMES = {
   reject: "❌ REJECT FAILED",
   worker: "👥 WORKER GROUP"
 };
+
+// Absensi bots (also used in transaction bot as `assigned_to`)
+const ABSENSI_BOTS = []; // bots disabled
 
 // =======================
 // AUTH LOGIN
@@ -82,6 +86,9 @@ async function doLogin() {
 
   switchRoom('worker'); // Start in worker group
   initRealtime();
+
+  // Start simulated absensi bots (chat page)
+  startAbsensiBotsIfNeeded();
 }
 
 function saveAbsensiState() {
@@ -139,7 +146,9 @@ async function sendMessage() {
   const msg = input.value.trim();
   if (!msg) return;
 
-  const msgData = { username: currentUser, message: msg, type: "user", room: activeRoom };
+  const msgData = roomsSupported
+    ? { username: currentUser, message: msg, type: "user", room: activeRoom }
+    : { username: currentUser, message: msg, type: "user" };
 
   console.log("Attempting to send:", msgData);
   const { error } = await sb.from("messages").insert([msgData]);
@@ -147,6 +156,7 @@ async function sendMessage() {
   if (error) {
     console.error("Insert error:", error);
     if (error.message.includes('column "room" does not exist')) {
+      roomsSupported = false;
       console.warn("Retrying without room field...");
       const fallbackMsg = { username: currentUser, message: msg, type: "user" };
       const { error: err2 } = await sb.from("messages").insert([fallbackMsg]);
@@ -175,9 +185,12 @@ async function sendAction(text) {
   saveAbsensiState(); // Simpan perubahan agar tidak hilang saat refresh
 
   // Notification to current room
-  const notifyData = { username: currentUser, message: `<i>${text}</i>`, type: "action", room: activeRoom };
+  const notifyData = roomsSupported
+    ? { username: currentUser, message: `<i>${text}</i>`, type: "action", room: activeRoom }
+    : { username: currentUser, message: `<i>${text}</i>`, type: "action" };
   const { error: err1 } = await sb.from("messages").insert([notifyData]);
   if (err1 && err1.message.includes('column "room" does not exist')) {
+    roomsSupported = false;
     await sb.from("messages").insert([{ username: currentUser, message: `<i>${text}</i>`, type: "action" }]);
   }
 
@@ -192,9 +205,12 @@ async function sendAction(text) {
   </div>`;
 
   // Simpan summary dengan username = currentUser (bukan BOT) agar bisa difilter per admin
-  const botData = { username: currentUser, message: summary, type: "bot", room: "absensi" };
+  const botData = roomsSupported
+    ? { username: currentUser, message: summary, type: "bot", room: "absensi" }
+    : { username: currentUser, message: summary, type: "bot" };
   const { error: err2 } = await sb.from("messages").insert([botData]);
   if (err2 && err2.message.includes('column "room" does not exist')) {
+    roomsSupported = false;
     await sb.from("messages").insert([{ username: currentUser, message: summary, type: "bot" }]);
   }
 }
@@ -211,10 +227,10 @@ function getUserColor(username) {
 }
 
 function renderMessage(m) {
-  const msgRoom = (m.room || 'worker').toLowerCase();
   const currentActive = (activeRoom || 'worker').toLowerCase();
+  const msgRoom = roomsSupported ? (m.room || 'worker').toLowerCase() : currentActive;
 
-  if (msgRoom !== currentActive) {
+  if (roomsSupported && msgRoom !== currentActive) {
     updateSidebarPreview(m);
     return;
   }
@@ -320,12 +336,9 @@ async function confirmSendImage() {
     // 3. Insert message
     const finalMessage = caption ? `${imageUrl}|--CAPTION--|${caption}` : imageUrl;
     
-    const msgData = { 
-      username: currentUser, 
-      message: finalMessage, 
-      type: "image", 
-      room: activeRoom 
-    };
+    const msgData = roomsSupported
+      ? { username: currentUser, message: finalMessage, type: "image", room: activeRoom }
+      : { username: currentUser, message: finalMessage, type: "image" };
 
     const { error: dbError } = await sb.from("messages").insert([msgData]);
     if (dbError) throw dbError;
@@ -364,7 +377,7 @@ function updateSidebarPreview(m) {
   const timeEl = document.getElementById(`time-${room}`);
   
   if (previewEl) {
-    let cleanMsg = m.message.replace(/<[^>]*>?/gm, '');
+    let cleanMsg = (m.message || "").replace(/<[^>]*>?/gm, '');
     previewEl.textContent = `${m.username}: ${cleanMsg}`;
   }
   
@@ -381,7 +394,7 @@ async function loadMessages() {
   console.log("Memuat pesan untuk room:", activeRoom);
   
   let query = sb.from("messages").select("*");
-  if (activeRoom) {
+  if (activeRoom && roomsSupported) {
     query = query.eq('room', activeRoom.toLowerCase());
   }
   
@@ -389,6 +402,7 @@ async function loadMessages() {
   let { data, error } = await query.order("created_at", { ascending: false }).limit(50);
 
   if (error && error.message.includes('column "room" does not exist')) {
+    roomsSupported = false;
     const fallback = await sb.from("messages").select("*").order("created_at", { ascending: false }).limit(50);
     data = fallback.data;
     error = fallback.error;
@@ -569,3 +583,235 @@ document.getElementById('zoom-modal')?.addEventListener('click', (e) => {
     closeZoom();
   }
 });
+
+// ─────────────────────────────────────────────────────
+//  ABSENSI BOTS (Simulasi "manusia" di room Absensi)
+// ─────────────────────────────────────────────────────
+
+function getJakartaParts(d = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jakarta",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+
+  const get = (t) => parts.find((p) => p.type === t)?.value;
+  return {
+    hour: Number(get("hour")),
+    minute: Number(get("minute")),
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+  };
+}
+
+function getJakartaDateKey(d = new Date()) {
+  const p = getJakartaParts(d);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+function isWithinAbsensiWorkWindow(d = new Date()) {
+  const p = getJakartaParts(d);
+  const cur = p.hour * 60 + p.minute;
+  const start = 8 * 60; // 08:00
+  const end = 20 * 60; // 20:00
+  return cur >= start && cur <= end;
+}
+
+function formatJakartaTime(d = new Date()) {
+  return d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+    hour12: false,
+  });
+}
+
+function randInt(min, max) {
+  return Math.floor(min + Math.random() * (max - min + 1));
+}
+
+function loadBotAbsensiState(botName) {
+  const key = `absensi_bot_${botName}`;
+  const saved = localStorage.getItem(key);
+  if (saved) return JSON.parse(saved);
+  return {
+    dateKey: null,
+    masuk: null,
+    wc: 0,
+    makan: 0,
+    pulang: null,
+    masukMs: null,
+    wcTimesMs: [],
+    makanTimesMs: [],
+    pulangMs: null,
+  };
+}
+
+function saveBotAbsensiState(botName, st) {
+  const key = `absensi_bot_${botName}`;
+  localStorage.setItem(key, JSON.stringify(st));
+}
+
+async function insertBotActionToChat({ botName, room, text }) {
+  const notifyData = roomsSupported
+    ? { username: botName, message: `<i>${text}</i>`, type: "action", room }
+    : { username: botName, message: `<i>${text}</i>`, type: "action" };
+  const { error } = await sb.from("messages").insert([notifyData]);
+  if (error && error.message.includes('column "room" does not exist')) {
+    roomsSupported = false;
+    await sb.from("messages").insert([{ username: botName, message: `<i>${text}</i>`, type: "action" }]);
+  }
+}
+
+async function insertBotSummaryToAbsensi({ botName, st }) {
+  const summary = `
+    <div class="absensi-box">
+      <div class="absensi-title">📊 ${botName}'s Summary</div>
+      <div class="absensi-row masuk"><span>Check-in</span> <span>${st.masuk || "—"}</span></div>
+      <div class="absensi-row wc"><span>WC Break</span> <span>${st.wc}x</span></div>
+      <div class="absensi-row makan"><span>Meal Break</span><span>${st.makan}x</span></div>
+      <div class="absensi-row pulang"><span>Check-out</span> <span>${st.pulang || "—"}</span></div>
+    </div>`;
+
+  const botData = roomsSupported
+    ? { username: botName, message: summary, type: "bot", room: "absensi" }
+    : { username: botName, message: summary, type: "bot" };
+  const { error: err2 } = await sb.from("messages").insert([botData]);
+  if (err2 && err2.message.includes('column "room" does not exist')) {
+    roomsSupported = false;
+    await sb.from("messages").insert([{ username: botName, message: summary, type: "bot" }]);
+  }
+}
+
+async function sendAbsensiBotAction(botName, actionText, now = new Date()) {
+  const st = loadBotAbsensiState(botName);
+
+  if (!isWithinAbsensiWorkWindow(now)) return;
+
+  const nowMs = now.getTime();
+  const dateKey = getJakartaDateKey(now);
+
+  // reset if day changes
+  if (st.dateKey !== dateKey) {
+    st.dateKey = dateKey;
+    st.masuk = null;
+    st.wc = 0;
+    st.makan = 0;
+    st.pulang = null;
+    st.masukMs = null;
+    st.wcTimesMs = [];
+    st.makanTimesMs = [];
+    st.pulangMs = null;
+  }
+
+  if (actionText.includes("Masuk")) {
+    st.masukMs = nowMs;
+    st.masuk = formatJakartaTime(now);
+    st.wc = 0;
+    st.makan = 0;
+    st.pulang = null;
+
+    // Plan WC (max 5x) within ~15m, Makan (max 3x) within ~30m (simulated spacing)
+    const totalWc = randInt(0, 5);
+    const totalMakan = randInt(1, 3);
+
+    st.wcTimesMs = Array.from({ length: totalWc }).map((_, i) => nowMs + randInt(25, 55) * 1000 + i * randInt(25, 60) * 1000);
+    st.makanTimesMs = Array.from({ length: totalMakan }).map((_, i) => {
+      const afterWcBase = st.wcTimesMs.length ? st.wcTimesMs[st.wcTimesMs.length - 1] : nowMs;
+      return afterWcBase + randInt(60, 120) * 1000 + i * randInt(35, 85) * 1000;
+    });
+
+    const lastMakan = st.makanTimesMs.length ? st.makanTimesMs[st.makanTimesMs.length - 1] : afterSafe(nowMs);
+    function afterSafe(t) { return t; }
+    st.pulangMs = lastMakan + randInt(45, 120) * 1000;
+  } else if (actionText.includes("WC")) {
+    st.wc++;
+  } else if (actionText.includes("Makan")) {
+    st.makan++;
+  } else if (actionText.includes("Pulang")) {
+    st.pulang = formatJakartaTime(now);
+    st.pulangMs = null;
+  }
+
+  saveBotAbsensiState(botName, st);
+
+  // 1) action message in absensi room
+  await insertBotActionToChat({ botName, room: "absensi", text: actionText });
+  // 2) summary update
+  await insertBotSummaryToAbsensi({ botName, st });
+}
+
+let _absensiBotLoopStarted = false;
+
+function tickAbsensiBots() {
+  if (!Array.isArray(ABSENSI_BOTS) || ABSENSI_BOTS.length === 0) return;
+  if (!isWithinAbsensiWorkWindow(new Date())) return;
+
+  const now = new Date();
+  const nowMs = now.getTime();
+  const dateKey = getJakartaDateKey(now);
+
+  // Send at most one action per tick per bot
+  ABSENSI_BOTS.forEach(async (botName) => {
+    const st = loadBotAbsensiState(botName);
+
+    if (st.dateKey !== dateKey) {
+      st.dateKey = dateKey;
+      st.masuk = null;
+      st.wc = 0;
+      st.makan = 0;
+      st.pulang = null;
+      st.masukMs = null;
+      st.wcTimesMs = [];
+      st.makanTimesMs = [];
+      st.pulangMs = null;
+      saveBotAbsensiState(botName, st);
+    }
+
+    if (!st.masukMs) {
+      // start sometime inside window
+      if (Math.random() < 0.18) {
+        await sendAbsensiBotAction(botName, "Masuk Kerja", now);
+      }
+      return;
+    }
+
+    // WC (max 5x)
+    if (st.wcTimesMs.length && st.wc < 5 && nowMs >= st.wcTimesMs[0]) {
+      st.wcTimesMs.shift();
+      saveBotAbsensiState(botName, st);
+      await sendAbsensiBotAction(botName, "Ke WC (15m)", now);
+      return;
+    }
+
+    // Makan (max 3x)
+    if (st.makanTimesMs.length && st.makan < 3 && nowMs >= st.makanTimesMs[0]) {
+      st.makanTimesMs.shift();
+      saveBotAbsensiState(botName, st);
+      await sendAbsensiBotAction(botName, "Istirahat Makan", now);
+      return;
+    }
+
+    // Pulang
+    if (st.pulangMs && nowMs >= st.pulangMs && !st.pulang) {
+      st.pulangMs = null;
+      saveBotAbsensiState(botName, st);
+      await sendAbsensiBotAction(botName, "Pulang Kerja", now);
+      return;
+    }
+  });
+}
+
+function startAbsensiBotsIfNeeded() {
+  if (_absensiBotLoopStarted) return;
+  _absensiBotLoopStarted = true;
+  tickAbsensiBots();
+  setInterval(tickAbsensiBots, 20_000);
+}
+
+// Start is triggered after login; keep function available.
