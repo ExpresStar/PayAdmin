@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PayAdmin — Setup 2FA</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f172a;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .logo img { width: 72px; height: 72px; border-radius: 14px; }
+    .logo h1 {
+      color: #f8fafc;
+      font-size: 22px;
+      font-weight: 700;
+      margin-top: 10px;
+    }
+    .logo p { color: #64748b; font-size: 13px; margin-top: 4px; }
+
+    .step {
+      background: #0f172a;
+      border: 1px solid #1e3a5f;
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      background: #1a7dc4;
+      color: white;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+    .step-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .step-body { font-size: 12px; color: #94a3b8; line-height: 1.6; }
+
+    /* QR code */
+    #qr-canvas {
+      display: block;
+      margin: 14px auto;
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+    }
+
+    /* Secret key display */
+    .secret-box {
+      background: #0f172a;
+      border: 1px solid #1e3a5f;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-top: 10px;
+    }
+    .secret-label {
+      font-size: 10px;
+      color: #64748b;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .secret-key {
+      font-family: 'Courier New', monospace;
+      font-size: 16px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: 3px;
+      word-break: break-all;
+    }
+    .copy-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #1e3a5f;
+      color: #38bdf8;
+      border: 1px solid #1a7dc4;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+      width: 100%;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    .copy-btn:hover { background: #1a7dc4; color: white; }
+
+    /* Verify section */
+    .verify-section {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-top: 8px;
+    }
+    .verify-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 10px;
+    }
+    .verify-input {
+      width: 100%;
+      padding: 10px 14px;
+      background: #1e293b;
+      border: 1.5px solid #334155;
+      border-radius: 8px;
+      color: white;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 8px;
+      text-align: center;
+      outline: none;
+      margin-bottom: 10px;
+    }
+    .verify-input:focus { border-color: #1a7dc4; }
+    .verify-btn {
+      width: 100%;
+      padding: 11px;
+      background: #1a7dc4;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .verify-btn:hover { background: #155fa0; }
+    .verify-result {
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      display: none;
+    }
+    .verify-result.ok { background: #052e16; border: 1px solid #10b981; color: #34d399; }
+    .verify-result.fail { background: #450a0a; border: 1px solid #ef4444; color: #f87171; }
+
+    .warn-box {
+      background: #422006;
+      border: 1px solid #f59e0b;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-top: 16px;
+      font-size: 12px;
+      color: #fcd34d;
+      line-height: 1.5;
+    }
+  </style>
+  <!-- Load otplib v12 for verification test -->
+  <script src="https://unpkg.com/otplib@12.0.1/otplib-browser.js"></script>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">
+    <img src="favicon.png" alt="Logo" onerror="this.style.display='none'">
+    <h1>PayAdmin 2FA Setup</h1>
+    <p>Google Authenticator Configuration</p>
+  </div>
+
+  <!-- STEP 1: SCAN QR -->
+  <div class="step">
+    <div class="step-title">
+      <span class="step-num">1</span>
+      Scan QR Code dengan Google Authenticator
+    </div>
+    <div class="step-body">
+      Buka Google Authenticator → Klik <strong>+</strong> → pilih <strong>Scan QR code</strong>
+    </div>
+    <canvas id="qr-canvas" width="200" height="200"></canvas>
+  </div>
+
+  <!-- STEP 2: MANUAL KEY -->
+  <div class="step">
+    <div class="step-title">
+      <span class="step-num">2</span>
+      Atau Masukkan Key Secara Manual
+    </div>
+    <div class="step-body">
+      Jika tidak bisa scan QR, pilih <strong>Enter setup key</strong> di Google Authenticator:<br><br>
+      · <strong>Account name:</strong> PayAdmin<br>
+      · <strong>Your key:</strong> (lihat di bawah)<br>
+      · <strong>Type:</strong> Time-based ✓
+    </div>
+    <div class="secret-box">
+      <div class="secret-label">Master Secret Key (32 char Base32)</div>
+      <div class="secret-key" id="secret-display">JFIF UWTQ LFJE MX3S KZWF KV2Q PAYADMIN</div>
+    </div>
+    <button class="copy-btn" onclick="copySecret()">📋 Copy Secret Key</button>
+  </div>
+
+  <!-- STEP 3: VERIFY -->
+  <div class="verify-section">
+    <div class="verify-title">🔐 Test Kode 6-digit dari Google Authenticator</div>
+    <input type="text" class="verify-input" id="test-code" maxlength="6" placeholder="000000" oninput="this.value=this.value.replace(/\D/g,'')">
+    <button class="verify-btn" onclick="verifyCode()">✓ Verifikasi Kode</button>
+    <div class="verify-result" id="verify-result"></div>
+  </div>
+
+  <div class="warn-box">
+    ⚠ <strong>Penting:</strong> Secret key ini digunakan untuk SEMUA admin. Jangan bagikan ke siapapun di luar tim. Gunakan halaman ini hanya sekali saat setup awal.
+  </div>
+</div>
+
+<script>
+  // ===================================================
+  //  MASTER SECRET — WAJIB sama persis dengan script.js
+  //  dan chat.js!
+  // ===================================================
+  const MASTER_SECRET = "JFIFUWTQLFJEMX3SKZWFKV2QPAYADMIN";
+
+  // Format tampilan (spasi setiap 4 char untuk mudah dibaca)
+  const secretFormatted = MASTER_SECRET.match(/.{1,4}/g).join(" ");
+  document.getElementById("secret-display").textContent = secretFormatted;
+
+  // ── Generate QR Code ──────────────────────────────
+  const otpUri = `otpauth://totp/PayAdmin?secret=${MASTER_SECRET}&issuer=PayAdmin&algorithm=SHA1&digits=6&period=30`;
+  QRCode.toCanvas(
+    document.getElementById("qr-canvas"),
+    otpUri,
+    { width: 200, margin: 1, color: { dark: "#000000", light: "#ffffff" } },
+    (err) => { if (err) console.error("QR Error:", err); }
+  );
+
+  // ── Copy secret ───────────────────────────────────
+  function copySecret() {
+    navigator.clipboard.writeText(MASTER_SECRET).then(() => {
+      alert("✓ Secret key disalin ke clipboard!\n\nPaste ke Google Authenticator → Enter setup key → 'Your key'");
+    }).catch(() => {
+      prompt("Copy manual dari sini:", MASTER_SECRET);
+    });
+  }
+
+  // ── Verify code ───────────────────────────────────
+  function verifyCode() {
+    const code = document.getElementById("test-code").value.trim();
+    const resultEl = document.getElementById("verify-result");
+
+    if (code.length !== 6) {
+      resultEl.style.display = "block";
+      resultEl.className = "verify-result fail";
+      resultEl.textContent = "⚠ Masukkan 6 digit kode dari Google Authenticator";
+      return;
+    }
+
+    try {
+      otplib.authenticator.options = { step: 30, window: 1 };
+      const isValid = otplib.authenticator.check(code, MASTER_SECRET);
+
+      resultEl.style.display = "block";
+      if (isValid) {
+        resultEl.className = "verify-result ok";
+        resultEl.textContent = "✓ BERHASIL! Kode valid. Google Authenticator sudah tersinkron dengan sistem.";
+      } else {
+        const expected = otplib.authenticator.generate(MASTER_SECRET);
+        resultEl.className = "verify-result fail";
+        resultEl.textContent = `✗ GAGAL! Kode tidak cocok. Pastikan waktu HP sudah sinkron (NTP). Expected: ${expected}`;
+      }
+    } catch (e) {
+      resultEl.style.display = "block";
+      resultEl.className = "verify-result fail";
+      resultEl.textContent = "✗ Error: " + e.message;
+    }
+  }
+
+  // Tekan Enter untuk verifikasi
+  document.getElementById("test-code").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") verifyCode();
+  });
+</script>
+
+</body>
+</html>
