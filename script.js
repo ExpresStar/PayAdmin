@@ -877,7 +877,7 @@ async function doLogin() {
 
   // 🔐 UNIFIED MASTER 2FA VERIFICATION (Satu Kunci untuk Semua Admin)
   const twoFACode = document.getElementById("login-2fa").value.trim();
-  const MASTER_SECRET = "JFIFUWTQLFJEMX3SKZWFKV2QPAYADMIN";
+  const MASTER_SECRET = "PAYADMINVIETNAM2SECRETKEYFORTOTP";
   
   const userEmail = data.user.email.toLowerCase();
 
