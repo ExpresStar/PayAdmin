@@ -3,14 +3,15 @@
 // =======================
 
 const SUPABASE_URL = "https://mfuqwfpnzylosqfmmuic.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mdXF3ZnBuenlsb3NxZm1tdWljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5ODY4ODYsImV4cCI6MjA4OTU2Mjg4Nn0.mOum9c_e5w9SqiKLzVb1ZihmtAaUtqMJOulyPLmbC-c"; 
+const SUPABASE_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mdXF3ZnBuenlsb3NxZm1tdWljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5ODY4ODYsImV4cCI6MjA4OTU2Mjg4Nn0.mOum9c_e5w9SqiKLzVb1ZihmtAaUtqMJOulyPLmbC-c";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // =======================
 // STATE
 // =======================
 
-let currentUser = ""; 
+let currentUser = "";
 let activeRoom = "worker"; // default room
 let presenceChannel = null; // ⬅️ Global agar bisa ditutup saat logout
 let roomsSupported = true; // fallback if messages table has no "room" column
@@ -18,22 +19,48 @@ let absensiState = {
   masuk: null,
   wc: 0,
   makan: 0,
-  pulang: null
+  pulang: null,
 };
 
 // AUTO OFFLINE SAAT TAB DITUTUP
-window.addEventListener('beforeunload', () => {
+window.addEventListener("beforeunload", () => {
   if (presenceChannel) sb.removeChannel(presenceChannel);
 });
 
 const ROOM_NAMES = {
   absensi: "📊 ABSENSI",
   reject: "❌ REJECT FAILED",
-  worker: "👥 WORKER GROUP"
+  worker: "👥 WORKER GROUP",
 };
 
-// Absensi bots (also used in transaction bot as `assigned_to`)
-const ABSENSI_BOTS = []; // bots disabled
+// ─────────────────────────────────────────────────────
+//  BOT ROSTER  (must match names in bot.js)
+//  Absensi bots → only active in "absensi" room
+//  Reject bots  → only active in "reject" room
+//  Worker Group → NO bot may ever write here
+// ─────────────────────────────────────────────────────
+const ABSENSI_BOTS = ["yaer98", "xiaoting99", "anan88"];
+
+/** Bot names that are allowed to post in reject room */
+const REJECT_BOT_NAMES = new Set(["willy@admin.com", "bil_scanner"]);
+
+/**
+ * Hard guard: called before every bot message insert.
+ * Returns false (and blocks) if a bot is trying to
+ * write to the Worker Group channel.
+ */
+function botMayPostToRoom(username, room) {
+  const isBot =
+    ABSENSI_BOTS.includes(username) || REJECT_BOT_NAMES.has(username);
+  if (!isBot) return true; // human admins can post anywhere
+  if (room === "worker") {
+    console.warn(
+      `[BOT GUARD] "${username}" tried to post to worker room — BLOCKED`,
+    );
+    return false;
+  }
+  return true;
+}
 
 // =======================
 // AUTH LOGIN
@@ -44,7 +71,7 @@ async function doLogin() {
   const passInput = document.getElementById("login-pass");
   const codeInput = document.getElementById("login-2fa");
   const errorEl = document.getElementById("login-error");
-  
+
   const email = emailInput.value.trim();
   const password = passInput.value;
   const twoFACode = codeInput.value.trim();
@@ -63,9 +90,10 @@ async function doLogin() {
     return;
   }
 
-  const MASTER_SECRET = "PAYADMIN24MSTRKY";
+  const MASTER_SECRET = "JFIFUWTQLFJEMX3SKZWFKV2QPAYADMIN";
   try {
     const cleanCode = twoFACode.replace(/\s/g, "");
+    otplib.authenticator.options = { step: 30, window: 1 };
     const isValid = otplib.authenticator.check(cleanCode, MASTER_SECRET);
     if (!isValid) {
       errorEl.style.display = "block";
@@ -84,7 +112,7 @@ async function doLogin() {
   document.getElementById("login-page").style.display = "none";
   document.getElementById("chat-ui").style.display = "flex";
 
-  switchRoom('worker'); // Start in worker group
+  switchRoom("worker"); // Start in worker group
   initRealtime();
 
   // Start simulated absensi bots (chat page)
@@ -93,7 +121,10 @@ async function doLogin() {
 
 function saveAbsensiState() {
   if (currentUser) {
-    localStorage.setItem(`absensi_${currentUser}`, JSON.stringify(absensiState));
+    localStorage.setItem(
+      `absensi_${currentUser}`,
+      JSON.stringify(absensiState),
+    );
   }
 }
 
@@ -114,24 +145,27 @@ function switchRoom(roomId) {
   activeRoom = roomId;
 
   // UI Updates
-  document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
-  document.getElementById(`room-${roomId}`).classList.add('active');
+  document
+    .querySelectorAll(".room-item")
+    .forEach((el) => el.classList.remove("active"));
+  document.getElementById(`room-${roomId}`).classList.add("active");
 
-  document.getElementById('active-room-title').textContent = ROOM_NAMES[roomId];
-  document.getElementById('active-room-subtitle').textContent = roomId === 'absensi' ? 'Hanya log absensi' : 'online';
+  document.getElementById("active-room-title").textContent = ROOM_NAMES[roomId];
+  document.getElementById("active-room-subtitle").textContent =
+    roomId === "absensi" ? "Hanya log absensi" : "online";
 
   // Toggle Input (Absensi room can't type)
-  const inputContainer = document.getElementById('msg-input-container');
-  const toolbar = document.getElementById('absensi-toolbar');
+  const inputContainer = document.getElementById("msg-input-container");
+  const toolbar = document.getElementById("absensi-toolbar");
 
-  if (roomId === 'absensi') {
+  if (roomId === "absensi") {
     // Absensi: Tampilkan Tombol, Sembunyikan Ketikan
-    toolbar.style.display = 'flex';
-    inputContainer.style.display = 'none';
+    toolbar.style.display = "flex";
+    inputContainer.style.display = "none";
   } else {
     // Lainnya: Sembunyikan Tombol, Tampilkan Ketikan
-    toolbar.style.display = 'none';
-    inputContainer.style.display = 'flex';
+    toolbar.style.display = "none";
+    inputContainer.style.display = "flex";
   }
 
   loadMessages();
@@ -171,12 +205,15 @@ async function sendMessage() {
 }
 
 async function sendAction(text) {
-  const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
+  const now = new Date().toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  });
   if (text.includes("Masuk")) {
     // Reset state jika absen masuk baru
     absensiState = { masuk: now, wc: 0, makan: 0, pulang: null };
-  }
-  else if (text.includes("WC")) absensiState.wc++;
+  } else if (text.includes("WC")) absensiState.wc++;
   else if (text.includes("Makan")) absensiState.makan++;
   else if (text.includes("Pulang")) {
     absensiState.pulang = now;
@@ -186,12 +223,21 @@ async function sendAction(text) {
 
   // Notification to current room
   const notifyData = roomsSupported
-    ? { username: currentUser, message: `<i>${text}</i>`, type: "action", room: activeRoom }
+    ? {
+        username: currentUser,
+        message: `<i>${text}</i>`,
+        type: "action",
+        room: activeRoom,
+      }
     : { username: currentUser, message: `<i>${text}</i>`, type: "action" };
   const { error: err1 } = await sb.from("messages").insert([notifyData]);
   if (err1 && err1.message.includes('column "room" does not exist')) {
     roomsSupported = false;
-    await sb.from("messages").insert([{ username: currentUser, message: `<i>${text}</i>`, type: "action" }]);
+    await sb
+      .from("messages")
+      .insert([
+        { username: currentUser, message: `<i>${text}</i>`, type: "action" },
+      ]);
   }
 
   // Summary to Absensi room — simpan dengan username sendiri supaya hanya tampil ke user yg bersangkutan
@@ -211,13 +257,24 @@ async function sendAction(text) {
   const { error: err2 } = await sb.from("messages").insert([botData]);
   if (err2 && err2.message.includes('column "room" does not exist')) {
     roomsSupported = false;
-    await sb.from("messages").insert([{ username: currentUser, message: summary, type: "bot" }]);
+    await sb
+      .from("messages")
+      .insert([{ username: currentUser, message: summary, type: "bot" }]);
   }
 }
 
 function getUserColor(username) {
   const colors = [
-    "#3498db", "#e67e22", "#2ecc71", "#f1c40f", "#9b59b6", "#1abc9c", "#e74c3c", "#7ab9f1", "#ff784e", "#a29bfe"
+    "#3498db",
+    "#e67e22",
+    "#2ecc71",
+    "#f1c40f",
+    "#9b59b6",
+    "#1abc9c",
+    "#e74c3c",
+    "#7ab9f1",
+    "#ff784e",
+    "#a29bfe",
   ];
   let hash = 0;
   for (let i = 0; i < username.length; i++) {
@@ -227,8 +284,10 @@ function getUserColor(username) {
 }
 
 function renderMessage(m) {
-  const currentActive = (activeRoom || 'worker').toLowerCase();
-  const msgRoom = roomsSupported ? (m.room || 'worker').toLowerCase() : currentActive;
+  const currentActive = (activeRoom || "worker").toLowerCase();
+  const msgRoom = roomsSupported
+    ? (m.room || "worker").toLowerCase()
+    : currentActive;
 
   if (roomsSupported && msgRoom !== currentActive) {
     updateSidebarPreview(m);
@@ -239,18 +298,26 @@ function renderMessage(m) {
   const username = m.username || "Admin";
   const message = m.message || "";
   const type = m.type || "user";
-  
+
   let rawDate = m.created_at;
-  if (rawDate && !rawDate.includes('Z') && !rawDate.includes('+')) rawDate = rawDate.replace(' ', 'T') + 'Z'; 
+  if (rawDate && !rawDate.includes("Z") && !rawDate.includes("+"))
+    rawDate = rawDate.replace(" ", "T") + "Z";
   const dateObj = rawDate ? new Date(rawDate) : new Date();
-  const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
+  const timeStr = dateObj.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  });
 
   const wrapper = document.createElement("div");
   wrapper.className = "tg-msg-wrapper";
 
   const div = document.createElement("div");
   div.className = "msg " + (username === currentUser ? "me" : "other");
-  if (type === "bot") div.style.background = "transparent", div.style.boxShadow = "none", div.style.padding = "0";
+  if (type === "bot")
+    ((div.style.background = "transparent"),
+      (div.style.boxShadow = "none"),
+      (div.style.padding = "0"));
 
   let html = "";
   if (username !== currentUser && type !== "bot") {
@@ -292,52 +359,63 @@ function renderMessage(m) {
 let pendingImageFile = null;
 
 function showImagePreview(file) {
-  if (!file || !file.type.startsWith('image/')) return;
+  if (!file || !file.type.startsWith("image/")) return;
   pendingImageFile = file;
-  
+
   const reader = new FileReader();
   reader.onload = (e) => {
-    document.getElementById('preview-img-target').src = e.target.result;
-    document.getElementById('image-preview-modal').style.display = 'flex';
-    document.getElementById('preview-caption').value = '';
-    document.getElementById('preview-caption').focus();
+    document.getElementById("preview-img-target").src = e.target.result;
+    document.getElementById("image-preview-modal").style.display = "flex";
+    document.getElementById("preview-caption").value = "";
+    document.getElementById("preview-caption").focus();
   };
   reader.readAsDataURL(file);
 }
 
 function closePreview() {
-  document.getElementById('image-preview-modal').style.display = 'none';
+  document.getElementById("image-preview-modal").style.display = "none";
   pendingImageFile = null;
 }
 
 async function confirmSendImage() {
   if (!pendingImageFile) return;
-  
-  const btn = document.getElementById('preview-send-btn');
-  const caption = document.getElementById('preview-caption').value.trim();
-  
+
+  const btn = document.getElementById("preview-send-btn");
+  const caption = document.getElementById("preview-caption").value.trim();
+
   btn.disabled = true;
   btn.innerText = "SENDING...";
 
   try {
     const file = pendingImageFile;
-    const fileExt = file.name ? file.name.split('.').pop() : 'png';
+    const fileExt = file.name ? file.name.split(".").pop() : "png";
     const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
     const filePath = `chat_images/${fileName}`;
 
     // 1. Upload
-    const { error: uploadError } = await sb.storage.from('chat_images').upload(filePath, file);
+    const { error: uploadError } = await sb.storage
+      .from("chat_images")
+      .upload(filePath, file);
     if (uploadError) throw uploadError;
 
     // 2. URL
-    const { data: publicUrlData } = sb.storage.from('chat_images').getPublicUrl(filePath);
+    const { data: publicUrlData } = sb.storage
+      .from("chat_images")
+      .getPublicUrl(filePath);
     const imageUrl = publicUrlData.publicUrl;
 
     // 3. Insert message
-    const finalMessage = caption ? `${imageUrl}|--CAPTION--|${caption}` : imageUrl;
-    
+    const finalMessage = caption
+      ? `${imageUrl}|--CAPTION--|${caption}`
+      : imageUrl;
+
     const msgData = roomsSupported
-      ? { username: currentUser, message: finalMessage, type: "image", room: activeRoom }
+      ? {
+          username: currentUser,
+          message: finalMessage,
+          type: "image",
+          room: activeRoom,
+        }
       : { username: currentUser, message: finalMessage, type: "image" };
 
     const { error: dbError } = await sb.from("messages").insert([msgData]);
@@ -359,31 +437,38 @@ async function handleFileSelect(event) {
 }
 
 // Fitur PASTE (Ctrl + V)
-document.getElementById('chat-input').addEventListener('paste', async (event) => {
-  const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-  
-  for (const item of items) {
-    if (item.type.indexOf('image') !== -1) {
-      const file = item.getAsFile();
-      showImagePreview(file);
-      event.preventDefault();
+document
+  .getElementById("chat-input")
+  .addEventListener("paste", async (event) => {
+    const items = (event.clipboardData || event.originalEvent.clipboardData)
+      .items;
+
+    for (const item of items) {
+      if (item.type.indexOf("image") !== -1) {
+        const file = item.getAsFile();
+        showImagePreview(file);
+        event.preventDefault();
+      }
     }
-  }
-});
+  });
 
 function updateSidebarPreview(m) {
-  const room = m.room || 'worker';
+  const room = m.room || "worker";
   const previewEl = document.getElementById(`preview-${room}`);
   const timeEl = document.getElementById(`time-${room}`);
-  
+
   if (previewEl) {
-    let cleanMsg = (m.message || "").replace(/<[^>]*>?/gm, '');
+    let cleanMsg = (m.message || "").replace(/<[^>]*>?/gm, "");
     previewEl.textContent = `${m.username}: ${cleanMsg}`;
   }
-  
+
   if (timeEl) {
     let dateObj = m.created_at ? new Date(m.created_at) : new Date();
-    timeEl.textContent = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
+    timeEl.textContent = dateObj.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Jakarta",
+    });
   }
 }
 
@@ -392,18 +477,24 @@ async function loadMessages() {
   box.innerHTML = `<div style="text-align:center; color:var(--tg-text-muted); margin-top:20px;">Memuat riwayat...</div>`;
 
   console.log("Memuat pesan untuk room:", activeRoom);
-  
+
   let query = sb.from("messages").select("*");
   if (activeRoom && roomsSupported) {
-    query = query.eq('room', activeRoom.toLowerCase());
+    query = query.eq("room", activeRoom.toLowerCase());
   }
-  
+
   // Ambil 50 pesan TERBARU (descending)
-  let { data, error } = await query.order("created_at", { ascending: false }).limit(50);
+  let { data, error } = await query
+    .order("created_at", { ascending: false })
+    .limit(50);
 
   if (error && error.message.includes('column "room" does not exist')) {
     roomsSupported = false;
-    const fallback = await sb.from("messages").select("*").order("created_at", { ascending: false }).limit(50);
+    const fallback = await sb
+      .from("messages")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50);
     data = fallback.data;
     error = fallback.error;
   }
@@ -417,15 +508,19 @@ async function loadMessages() {
   box.innerHTML = "";
   // Balik urutan data agar pesan terbaru ada di bawah (chronological)
   if (data) {
-    data.reverse().forEach(msg => renderMessage(msg));
+    data.reverse().forEach((msg) => renderMessage(msg));
   }
 }
 
 function initRealtime() {
   sb.channel("chat-global")
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, payload => {
-      renderMessage(payload.new);
-    })
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "messages" },
+      (payload) => {
+        renderMessage(payload.new);
+      },
+    )
     .subscribe();
 
   initPresence();
@@ -434,48 +529,48 @@ function initRealtime() {
 function initPresence() {
   if (presenceChannel) sb.removeChannel(presenceChannel);
 
-  presenceChannel = sb.channel('presence-admins', {
-    config: { presence: { key: currentUser } }
+  presenceChannel = sb.channel("presence-admins", {
+    config: { presence: { key: currentUser } },
   });
 
   presenceChannel
-    .on('presence', { event: 'sync' }, () => {
+    .on("presence", { event: "sync" }, () => {
       const state = presenceChannel.presenceState();
       updatePresenceUI(state);
     })
-    .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-      console.log('Joined:', key, newPresences);
+    .on("presence", { event: "join" }, ({ key, newPresences }) => {
+      console.log("Joined:", key, newPresences);
     })
-    .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-       console.log('Left:', key, leftPresences);
+    .on("presence", { event: "leave" }, ({ key, leftPresences }) => {
+      console.log("Left:", key, leftPresences);
     })
     .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
+      if (status === "SUBSCRIBED") {
         const presenceTrackStatus = await presenceChannel.track({
           user: currentUser,
           online_at: new Date().toISOString(),
         });
-        console.log('Track Status:', presenceTrackStatus);
+        console.log("Track Status:", presenceTrackStatus);
       }
     });
 }
 
 function updatePresenceUI(state) {
-  const listEl = document.getElementById('admin-presence-list');
+  const listEl = document.getElementById("admin-presence-list");
   if (!listEl) return;
-  listEl.innerHTML = '';
+  listEl.innerHTML = "";
 
   const onlineUsers = Object.keys(state);
-  
+
   // Use a Set to avoid duplicates if same user has multiple tabs
   const uniqueUsers = [...new Set(onlineUsers)];
 
-  uniqueUsers.forEach(user => {
+  uniqueUsers.forEach((user) => {
     // Simple display name from email/username
-    const displayName = user.split('@')[0];
-    
-    const div = document.createElement('div');
-    div.className = 'status-item';
+    const displayName = user.split("@")[0];
+
+    const div = document.createElement("div");
+    div.className = "status-item";
     div.innerHTML = `
       <div class="status-dot"></div>
       <div class="status-name">${displayName}</div>
@@ -484,7 +579,8 @@ function updatePresenceUI(state) {
   });
 
   if (uniqueUsers.length === 0) {
-    listEl.innerHTML = '<div style="font-size:12px; color:#7f91a4;">Tidak ada admin online</div>';
+    listEl.innerHTML =
+      '<div style="font-size:12px; color:#7f91a4;">Tidak ada admin online</div>';
   }
 }
 
@@ -495,7 +591,11 @@ document.getElementById("chat-input").addEventListener("keypress", (e) => {
 
 // GLOBAL TOOLS
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && document.getElementById("login-page").style.display !== "none") doLogin();
+  if (
+    e.key === "Enter" &&
+    document.getElementById("login-page").style.display !== "none"
+  )
+    doLogin();
   if (e.key === "Escape") closeZoom();
 });
 
@@ -505,24 +605,27 @@ document.addEventListener("keydown", (e) => {
 
 let zoomScale = 1;
 let isDragging = false;
-let startX, startY, translateX = 0, translateY = 0;
+let startX,
+  startY,
+  translateX = 0,
+  translateY = 0;
 
 function openZoom(url) {
-  const modal = document.getElementById('zoom-modal');
-  const img = document.getElementById('zoom-img-target');
+  const modal = document.getElementById("zoom-modal");
+  const img = document.getElementById("zoom-img-target");
   img.src = url;
-  modal.style.display = 'flex';
-  
+  modal.style.display = "flex";
+
   // Calculate initial scale to fit nicely if it's too small
   // We'll let CSS handle the fitting for large images (max-width: 90%)
   // but if it's tiny we can boost it. Actually let's just use scale=1
   // and ensure CSS is max-width/height 90%.
-  
+
   resetZoom();
 }
 
 function closeZoom() {
-  document.getElementById('zoom-modal').style.display = 'none';
+  document.getElementById("zoom-modal").style.display = "none";
 }
 
 function applyZoom(delta) {
@@ -541,45 +644,49 @@ function resetZoom() {
 }
 
 function updateZoomTransform() {
-  const img = document.getElementById('zoom-img-target');
+  const img = document.getElementById("zoom-img-target");
   if (img) {
     img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${zoomScale})`;
   }
 }
 
 // Drag functionality
-const container = document.getElementById('zoom-container');
+const container = document.getElementById("zoom-container");
 if (container) {
-  container.addEventListener('mousedown', (e) => {
+  container.addEventListener("mousedown", (e) => {
     isDragging = true;
     startX = e.clientX - translateX;
     startY = e.clientY - translateY;
-    container.style.cursor = 'grabbing';
+    container.style.cursor = "grabbing";
   });
 
-  window.addEventListener('mousemove', (e) => {
+  window.addEventListener("mousemove", (e) => {
     if (!isDragging) return;
     translateX = e.clientX - startX;
     translateY = e.clientY - startY;
     updateZoomTransform();
   });
 
-  window.addEventListener('mouseup', () => {
+  window.addEventListener("mouseup", () => {
     isDragging = false;
-    if (container) container.style.cursor = 'grab';
+    if (container) container.style.cursor = "grab";
   });
 
   // Mouse wheel zoom
-  container.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.2 : 0.2;
-    applyZoom(delta);
-  }, { passive: false });
+  container.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.2 : 0.2;
+      applyZoom(delta);
+    },
+    { passive: false },
+  );
 }
 
 // Click background to close
-document.getElementById('zoom-modal')?.addEventListener('click', (e) => {
-  if (e.target.id === 'zoom-modal' || e.target.id === 'zoom-container') {
+document.getElementById("zoom-modal")?.addEventListener("click", (e) => {
+  if (e.target.id === "zoom-modal" || e.target.id === "zoom-container") {
     closeZoom();
   }
 });
@@ -658,13 +765,20 @@ function saveBotAbsensiState(botName, st) {
 }
 
 async function insertBotActionToChat({ botName, room, text }) {
+  // Hard guard: bots must never touch Worker Group
+  if (!botMayPostToRoom(botName, room)) return;
+
   const notifyData = roomsSupported
     ? { username: botName, message: `<i>${text}</i>`, type: "action", room }
     : { username: botName, message: `<i>${text}</i>`, type: "action" };
   const { error } = await sb.from("messages").insert([notifyData]);
   if (error && error.message.includes('column "room" does not exist')) {
     roomsSupported = false;
-    await sb.from("messages").insert([{ username: botName, message: `<i>${text}</i>`, type: "action" }]);
+    await sb
+      .from("messages")
+      .insert([
+        { username: botName, message: `<i>${text}</i>`, type: "action" },
+      ]);
   }
 }
 
@@ -684,7 +798,9 @@ async function insertBotSummaryToAbsensi({ botName, st }) {
   const { error: err2 } = await sb.from("messages").insert([botData]);
   if (err2 && err2.message.includes('column "room" does not exist')) {
     roomsSupported = false;
-    await sb.from("messages").insert([{ username: botName, message: summary, type: "bot" }]);
+    await sb
+      .from("messages")
+      .insert([{ username: botName, message: summary, type: "bot" }]);
   }
 }
 
@@ -720,14 +836,22 @@ async function sendAbsensiBotAction(botName, actionText, now = new Date()) {
     const totalWc = randInt(0, 5);
     const totalMakan = randInt(1, 3);
 
-    st.wcTimesMs = Array.from({ length: totalWc }).map((_, i) => nowMs + randInt(25, 55) * 1000 + i * randInt(25, 60) * 1000);
+    st.wcTimesMs = Array.from({ length: totalWc }).map(
+      (_, i) => nowMs + randInt(25, 55) * 1000 + i * randInt(25, 60) * 1000,
+    );
     st.makanTimesMs = Array.from({ length: totalMakan }).map((_, i) => {
-      const afterWcBase = st.wcTimesMs.length ? st.wcTimesMs[st.wcTimesMs.length - 1] : nowMs;
+      const afterWcBase = st.wcTimesMs.length
+        ? st.wcTimesMs[st.wcTimesMs.length - 1]
+        : nowMs;
       return afterWcBase + randInt(60, 120) * 1000 + i * randInt(35, 85) * 1000;
     });
 
-    const lastMakan = st.makanTimesMs.length ? st.makanTimesMs[st.makanTimesMs.length - 1] : afterSafe(nowMs);
-    function afterSafe(t) { return t; }
+    const lastMakan = st.makanTimesMs.length
+      ? st.makanTimesMs[st.makanTimesMs.length - 1]
+      : afterSafe(nowMs);
+    function afterSafe(t) {
+      return t;
+    }
     st.pulangMs = lastMakan + randInt(45, 120) * 1000;
   } else if (actionText.includes("WC")) {
     st.wc++;
@@ -808,10 +932,16 @@ function tickAbsensiBots() {
 }
 
 function startAbsensiBotsIfNeeded() {
+  // ── Browser-side tick disabled ──────────────────────────────
+  //  Bot behaviour is now handled entirely by the standalone
+  //  Node.js bot.js process (Supabase inserts).
+  //  The tickAbsensiBots() function is kept for dev fallback only.
+  //  In production, keep ABSENSI_BOTS populated so renderMessage()
+  //  correctly identifies and styles bot messages in the UI.
   if (_absensiBotLoopStarted) return;
   _absensiBotLoopStarted = true;
-  tickAbsensiBots();
-  setInterval(tickAbsensiBots, 20_000);
+  // tickAbsensiBots();          ← disabled: runs server-side now
+  // setInterval(tickAbsensiBots, 20_000);
 }
 
 // Start is triggered after login; keep function available.
