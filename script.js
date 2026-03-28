@@ -13,7 +13,7 @@
 //  KEY  : Project Settings → API → anon / public key
 // ─────────────────────────────────────────────────────
 const SUPABASE_URL = "https://mfuqwfpnzylosqfmmuic.supabase.co";
-const SUPABASE_KEY = "sb_publishable_pkZOPM-0BRpiLyMdHn8UJA_K4kI8hnx";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mdXF3ZnBuenlsb3NxZm1tdWljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5ODY4ODYsImV4cCI6MjA4OTU2Mjg4Nn0.mOum9c_e5w9SqiKLzVb1ZihmtAaUtqMJOulyPLmbC-c";
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -877,22 +877,37 @@ async function doLogin() {
 
   // 🔐 UNIFIED MASTER 2FA VERIFICATION (Satu Kunci untuk Semua Admin)
   const twoFACode = document.getElementById("login-2fa").value.trim();
-  const MASTER_SECRET = "JBSWY3DPEHPK3PXP";
+  const MASTER_SECRET = "JFIFUWTQLFJEMX3SKZWFKV2QPAYADMIN";
   
   const userEmail = data.user.email.toLowerCase();
 
   try {
     // 🕵️‍♂️ Cek Library
     if (typeof otplib === "undefined") {
-      throw new Error("Pustaka Keamanan (otplib) gagal dimuat! Periksa koneksi internet atau CDN URL.");
+      throw new Error(
+        "Pustaka Keamanan (otplib) gagal dimuat! Periksa koneksi internet atau CDN URL.",
+      );
     }
     if (!otplib.authenticator) {
-      throw new Error("Pustaka Keamanan (otplib) dimuat tapi (authenticator) tidak ditemukan.");
+      throw new Error(
+        "Pustaka Keamanan (otplib) dimuat tapi (authenticator) tidak ditemukan.",
+      );
     }
-    
-    const cleanCode = twoFACode.replace(/\s/g, ""); 
+
+    // FIX 2FA
+    otplib.authenticator.options = {
+      step: 30,
+      window: 1,
+    };
+
+    const cleanCode = twoFACode.replace(/\s/g, "");
+
+    const expected = otplib.authenticator.generate(MASTER_SECRET);
+    console.log("INPUT:", cleanCode);
+    console.log("EXPECTED:", expected);
+
     const isValid = otplib.authenticator.check(cleanCode, MASTER_SECRET);
-    
+
     if (!isValid) {
       errEl.style.display = "block";
       errEl.textContent = `Security Code salah untuk ${userEmail}! 🛡️`;
