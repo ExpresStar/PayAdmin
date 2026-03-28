@@ -56,15 +56,15 @@
         Tombol ini akan menghapus <strong>SELURUH</strong> data berikut:<br>
         - Semua Transaksi (History)<br>
         - Semua Log Aktivitas<br>
-        - Seluruh Pesan Chat & Foto
+        - Seluruh Pesan Chat &amp; Foto
     </p>
-    <button id="main-btn" class="reset-btn" onclick="masterReset()">HAFUS SEMUA DATA</button>
+    <button id="main-btn" class="reset-btn" onclick="masterReset()">HAPUS SEMUA DATA</button>
     <div id="status-box" class="status"></div>
 </div>
 
 <script>
     const SUPABASE_URL = "https://mfuqwfpnzylosqfmmuic.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_pkZOPM-0BRpiLyMdHn8UJA_K4kI8hnx";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mdXF3ZnBuenlsb3NxZm1tdWljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5ODY4ODYsImV4cCI6MjA4OTU2Mjg4Nn0.mOum9c_e5w9SqiKLzVb1ZihmtAaUtqMJOulyPLmbC-c";
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     function log(msg, color = "#cbd5e1") {
@@ -90,33 +90,29 @@
         btn.innerText = "Processing...";
 
         try {
-            // 1. DELETE TRANSACTION LOGS
             log("Deleting Transaction Logs...");
             const { error: err1 } = await sb.from("transaction_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
             if (err1) throw err1;
 
-            // 2. DELETE TRANSACTIONS
             log("Deleting Transactions...");
             const { error: err2 } = await sb.from("transactions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
             if (err2) throw err2;
 
-            // 3. DELETE MESSAGES
             log("Deleting Chat Messages...");
             const { error: err3 } = await sb.from("messages").delete().neq("id", "00000000-0000-0000-0000-000000000000");
             if (err3) throw err3;
 
-            // 4. CLEANUP STORAGE (CHAT_IMAGES)
             log("Cleaning up Storage Bucket 'chat_images'...");
             const { data: files, error: listError } = await sb.storage.from('chat_images').list();
             if (listError) {
-                log("Warning: Storage cleanup skipped (bucket maybe empty or not found)", "#eab308");
+                log("Warning: Storage cleanup skipped", "#eab308");
             } else if (files && files.length > 0) {
                 const paths = files.map(f => f.name);
                 const { error: delError } = await sb.storage.from('chat_images').remove(paths);
                 if (delError) log("Warning: Storage delete failed: " + delError.message, "#f43f5e");
                 else log(`Storage: ${files.length} images deleted.`, "#10b981");
             } else {
-                log("Storage: No images found to delete.", "#94a3b8");
+                log("Storage: No images found.", "#94a3b8");
             }
 
             log("✅ SYSTEM RESET COMPLETE!", "#10b981");
@@ -128,7 +124,7 @@
             alert("Terjadi kesalahan saat reset: " + err.message);
         } finally {
             btn.disabled = false;
-            btn.innerText = "HAFUS SEMUA DATA";
+            btn.innerText = "HAPUS SEMUA DATA";
         }
     }
 </script>
