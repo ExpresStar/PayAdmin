@@ -13,7 +13,7 @@
     />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-    <script src="https://unpkg.com/otplib@12.0.1/otplib-browser.js"></script>
+    <script src="https://unpkg.com/otplib@11.0.1/otplib-browser.js"></script>
   </head>
   <body>
     <!-- ===== LOGIN PAGE ===== -->
@@ -46,7 +46,7 @@
           />
         </div>
 
-        <div class="form-group" id="2fa-group" style="margin-bottom: 20px;">
+        <!-- <div class="form-group" id="2fa-group" style="margin-bottom: 20px;">
           <label>Google 2FA Code</label>
           <input
             type="text"
@@ -55,7 +55,7 @@
             maxlength="6"
             style="letter-spacing: 5px; text-align: center; font-weight: 800; border: 2px solid #3b82f6;"
           />
-        </div>
+        </div> -->
 
         <button class="login-btn" onclick="doLogin()">Log In</button>
         <p
