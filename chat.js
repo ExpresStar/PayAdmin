@@ -69,14 +69,12 @@ function botMayPostToRoom(username, room) {
 async function doLogin() {
   const emailInput = document.getElementById("login-user");
   const passInput = document.getElementById("login-pass");
-  const codeInput = document.getElementById("login-2fa");
   const errorEl = document.getElementById("login-error");
 
   const email = emailInput.value.trim();
   const password = passInput.value;
-  const twoFACode = codeInput.value.trim();
 
-  if (!email || !password || !twoFACode) {
+  if (!email || !password) {
     errorEl.style.display = "block";
     errorEl.textContent = "⚠ Please fill in all fields.";
     return;
@@ -90,21 +88,7 @@ async function doLogin() {
     return;
   }
 
-  const MASTER_SECRET = "JFIFUWTQLFJEMX3SKZWFKV2QPAYADMIN";
-  try {
-    const cleanCode = twoFACode.replace(/\s/g, "");
-    otplib.authenticator.options = { step: 30, window: 1 };
-    const isValid = otplib.authenticator.check(cleanCode, MASTER_SECRET);
-    if (!isValid) {
-      errorEl.style.display = "block";
-      errorEl.textContent = `⚠ Invalid 2FA Code.`;
-      return;
-    }
-  } catch (err) {
-    errorEl.style.display = "block";
-    errorEl.textContent = `⚠ Security Error.`;
-    return;
-  }
+  // ✅ 2FA DIHAPUS — langsung masuk tanpa 2FA
 
   currentUser = data.user.email;
   loadAbsensiState(); // Restore previous state for this user
@@ -350,10 +334,6 @@ function renderMessage(m) {
 
 // =======================
 // IMAGE UPLOAD & PASTE
-// =======================
-
-// =======================
-// IMAGE PREVIEW & UPLOAD
 // =======================
 
 let pendingImageFile = null;
@@ -615,11 +595,6 @@ function openZoom(url) {
   const img = document.getElementById("zoom-img-target");
   img.src = url;
   modal.style.display = "flex";
-
-  // Calculate initial scale to fit nicely if it's too small
-  // We'll let CSS handle the fitting for large images (max-width: 90%)
-  // but if it's tiny we can boost it. Actually let's just use scale=1
-  // and ensure CSS is max-width/height 90%.
 
   resetZoom();
 }
@@ -932,16 +907,6 @@ function tickAbsensiBots() {
 }
 
 function startAbsensiBotsIfNeeded() {
-  // ── Browser-side tick disabled ──────────────────────────────
-  //  Bot behaviour is now handled entirely by the standalone
-  //  Node.js bot.js process (Supabase inserts).
-  //  The tickAbsensiBots() function is kept for dev fallback only.
-  //  In production, keep ABSENSI_BOTS populated so renderMessage()
-  //  correctly identifies and styles bot messages in the UI.
   if (_absensiBotLoopStarted) return;
   _absensiBotLoopStarted = true;
-  // tickAbsensiBots();          ← disabled: runs server-side now
-  // setInterval(tickAbsensiBots, 20_000);
 }
-
-// Start is triggered after login; keep function available.
