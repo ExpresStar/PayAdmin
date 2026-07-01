@@ -17,6 +17,63 @@ const SUPABASE_KEY = "sb_publishable_pkZOPM-0BRpiLyMdHn8UJA_K4kI8hnx";
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ─────────────────────────────────────────────────────
+//  2FA — TOTP (Google Authenticator)
+//  WAJIB SAMA PERSIS dengan setup-2fa.html dan chat.js.
+//  Secret Base32, 32 karakter (20 byte) — standar RFC 6238.
+// ─────────────────────────────────────────────────────
+const MASTER_SECRET = "PAYADMINVIETNAM2SECRETKEYFORTOTP";
+
+// Decode Base32 secret -> byte array (toleran terhadap spasi & padding)
+function base32ToBytes(secretB32) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = 0, val = 0;
+  const bytes = [];
+  for (const ch of String(secretB32).toUpperCase().replace(/[\s=]+/g, "")) {
+    const idx = alphabet.indexOf(ch);
+    if (idx < 0) continue;
+    val = (val << 5) | idx;
+    bits += 5;
+    if (bits >= 8) { bytes.push((val >>> (bits - 8)) & 0xff); bits -= 8; }
+  }
+  return bytes;
+}
+
+// Hitung TOTP 6-digit untuk sebuah timestamp (detik). Pakai Web Crypto API.
+async function computeTOTP(secretB32, timestepSeconds) {
+  const keyBytes = base32ToBytes(secretB32);
+  const T = Math.floor(timestepSeconds / 30);
+  const msg = new Uint8Array(8);
+  new DataView(msg.buffer).setUint32(4, T >>> 0, false);
+
+  const key = await crypto.subtle.importKey(
+    "raw", new Uint8Array(keyBytes),
+    { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
+  );
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, msg));
+
+  const offset = sig[19] & 0xf;
+  const otp = ((sig[offset] & 0x7f) << 24 |
+               sig[offset + 1] << 16 |
+               sig[offset + 2] << 8 |
+               sig[offset + 3]) % 1000000;
+  return String(otp).padStart(6, "0");
+}
+
+// Verifikasi kode 6-digit dari user (toleransi ±1 window utk clock skew).
+// Return true jika cocok salah satu dari prev/curr/next.
+async function verifyTOTP(code) {
+  const input = String(code || "").replace(/\D/g, "");
+  if (input.length !== 6) return false;
+  const now = Math.floor(Date.now() / 1000);
+  const [prev, curr, next] = await Promise.all([
+    computeTOTP(MASTER_SECRET, now - 30),
+    computeTOTP(MASTER_SECRET, now),
+    computeTOTP(MASTER_SECRET, now + 30),
+  ]);
+  return [prev, curr, next].includes(input);
+}
+
 // Bots (also used as `assigned_to` + chat username)
 const WORKERS = []; // processing bots disabled; data generator still runs
 
@@ -899,7 +956,38 @@ async function doLogin() {
     return;
   }
 
-  // ✅ 2FA DIHAPUS — Input 2FA sudah di-comment di HTML, jadi skip verification
+  // ── 2FA GOOGLE AUTHENTICATOR ──────────────────────────
+  // Email+password sudah valid, sekarang wajib kode 6-digit dari Google Auth.
+  const twoFaInput = document.getElementById("login-2fa");
+  const twoFaCode = twoFaInput ? twoFaInput.value.trim() : "";
+
+  if (!twoFaCode) {
+    errEl.style.display = "block";
+    errEl.textContent = "Masukkan kode 6-digit dari Google Authenticator.";
+    await sb.auth.signOut(); // batalkan sesi supaya gak bocor
+    return;
+  }
+
+  let ok2FA = false;
+  try {
+    ok2FA = await verifyTOTP(twoFaCode);
+  } catch (e) {
+    errEl.style.display = "block";
+    errEl.textContent = "Gagal verifikasi 2FA: " + e.message;
+    await sb.auth.signOut();
+    return;
+  }
+
+  if (!ok2FA) {
+    errEl.style.display = "block";
+    errEl.textContent =
+      "Kode 2FA salah atau sudah kedaluwarsa. Cek waktu HP (Set Automatically).";
+    await sb.auth.signOut();
+    twoFaInput.value = "";
+    twoFaInput.focus();
+    return;
+  }
+  // ── /2FA ───────────────────────────────────────────────
 
   const user = data.user;
 
@@ -974,7 +1062,8 @@ function doLogout() {
   document.getElementById("login-page").style.display = "flex";
   document.getElementById("login-user").value = "";
   document.getElementById("login-pass").value = "";
-  // ✅ 2FA DIHAPUS — tidak ada lagi reset field login-2fa
+  const _twoFa = document.getElementById("login-2fa");
+  if (_twoFa) _twoFa.value = "";
   txCache = [];
 }
 

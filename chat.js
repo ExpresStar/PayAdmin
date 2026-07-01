@@ -8,6 +8,58 @@ const SUPABASE_KEY =
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // =======================
+// 2FA — TOTP (Google Authenticator)
+// WAJIB SAMA PERSIS dengan setup-2fa.html dan script.js.
+// =======================
+const MASTER_SECRET = "PAYADMINVIETNAM2SECRETKEYFORTOTP";
+
+function base32ToBytes(secretB32) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = 0, val = 0;
+  const bytes = [];
+  for (const ch of String(secretB32).toUpperCase().replace(/[\s=]+/g, "")) {
+    const idx = alphabet.indexOf(ch);
+    if (idx < 0) continue;
+    val = (val << 5) | idx;
+    bits += 5;
+    if (bits >= 8) { bytes.push((val >>> (bits - 8)) & 0xff); bits -= 8; }
+  }
+  return bytes;
+}
+
+async function computeTOTP(secretB32, timestepSeconds) {
+  const keyBytes = base32ToBytes(secretB32);
+  const T = Math.floor(timestepSeconds / 30);
+  const msg = new Uint8Array(8);
+  new DataView(msg.buffer).setUint32(4, T >>> 0, false);
+
+  const key = await crypto.subtle.importKey(
+    "raw", new Uint8Array(keyBytes),
+    { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
+  );
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, msg));
+
+  const offset = sig[19] & 0xf;
+  const otp = ((sig[offset] & 0x7f) << 24 |
+               sig[offset + 1] << 16 |
+               sig[offset + 2] << 8 |
+               sig[offset + 3]) % 1000000;
+  return String(otp).padStart(6, "0");
+}
+
+async function verifyTOTP(code) {
+  const input = String(code || "").replace(/\D/g, "");
+  if (input.length !== 6) return false;
+  const now = Math.floor(Date.now() / 1000);
+  const [prev, curr, next] = await Promise.all([
+    computeTOTP(MASTER_SECRET, now - 30),
+    computeTOTP(MASTER_SECRET, now),
+    computeTOTP(MASTER_SECRET, now + 30),
+  ]);
+  return [prev, curr, next].includes(input);
+}
+
+// =======================
 // STATE
 // =======================
 
@@ -88,7 +140,36 @@ async function doLogin() {
     return;
   }
 
-  // ✅ 2FA DIHAPUS — langsung masuk tanpa 2FA
+  // ── 2FA GOOGLE AUTHENTICATOR ──────────────────────────
+  const twoFaInput = document.getElementById("login-2fa");
+  const twoFaCode = twoFaInput ? twoFaInput.value.trim() : "";
+
+  if (!twoFaCode) {
+    errorEl.style.display = "block";
+    errorEl.textContent = "⚠ Masukkan kode 6-digit dari Google Authenticator.";
+    await sb.auth.signOut();
+    return;
+  }
+
+  let ok2FA = false;
+  try {
+    ok2FA = await verifyTOTP(twoFaCode);
+  } catch (e) {
+    errorEl.style.display = "block";
+    errorEl.textContent = "⚠ Gagal verifikasi 2FA: " + e.message;
+    await sb.auth.signOut();
+    return;
+  }
+
+  if (!ok2FA) {
+    errorEl.style.display = "block";
+    errorEl.textContent =
+      "⚠ Kode 2FA salah atau kedaluwarsa. Cek waktu HP (Set Automatically).";
+    await sb.auth.signOut();
+    if (twoFaInput) { twoFaInput.value = ""; twoFaInput.focus(); }
+    return;
+  }
+  // ── /2FA ───────────────────────────────────────────────
 
   currentUser = data.user.email;
   loadAbsensiState(); // Restore previous state for this user
