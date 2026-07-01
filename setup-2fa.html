@@ -135,9 +135,8 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"
-        onerror="document.getElementById('qr-error').style.display='block';document.getElementById('qr-canvas').style.display='none'">
-</script>
+<!-- Primary QR library (jsdelivr) -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script>
   // ================================================================
   //  MASTER SECRET — WAJIB SAMA DENGAN script.js DAN chat.js
@@ -162,19 +161,58 @@
 
   // ── Generate QR Code ──────────────────────────────────────────
   window.addEventListener("load", function() {
+    var qrErrorEl = document.getElementById("qr-error");
+    var qrCanvas  = document.getElementById("qr-canvas");
+    var qrWrap    = document.getElementById("qr-wrap");
+
+    // Helper: buat QR via qrserver.com API sebagai <img> (no JS library needed)
+    function imageFallback() {
+      console.warn("[QR] Library gagal, pakai qrserver image fallback");
+      qrCanvas.style.display = "none";
+      var img = document.createElement("img");
+      img.src = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=" +
+        encodeURIComponent(OTP_URI);
+      img.alt = "QR Code 2FA";
+      img.style.cssText = "background:white;padding:12px;border-radius:10px;display:block;width:220px;height:220px;";
+      img.onerror = function() {
+        qrErrorEl.style.display = "block";
+        qrErrorEl.textContent = "⚠ QR gagal (CDN diblokir?). Gunakan Copy Key manual di bawah.";
+      };
+      qrWrap.insertBefore(img, qrCanvas);
+    }
+
+    // Kalau library sama sekali tidak ada → Google Charts
     if (typeof QRCode === "undefined") {
-      document.getElementById("qr-error").style.display = "block";
-      document.getElementById("qr-canvas").style.display = "none";
+      imageFallback();
       return;
     }
+
+    // Coba 1: QR ke canvas
     QRCode.toCanvas(
-      document.getElementById("qr-canvas"),
+      qrCanvas,
       OTP_URI,
       { width: 220, margin: 2, errorCorrectionLevel: "M", color: { dark: "#000", light: "#fff" } },
       function(err) {
         if (err) {
-          document.getElementById("qr-error").style.display = "block";
-          document.getElementById("qr-canvas").style.display = "none";
+          console.warn("[QR] canvas gagal:", err);
+          qrCanvas.style.display = "none";
+          // Coba 2: QR ke data URL → render ke <img>
+          QRCode.toDataURL(
+            OTP_URI,
+            { width: 220, margin: 2, errorCorrectionLevel: "M", color: { dark: "#000", light: "#fff" } },
+            function(err2, url) {
+              if (err2 || !url) {
+                // Coba 3: Google Charts
+                imageFallback();
+              } else {
+                var img = document.createElement("img");
+                img.src = url;
+                img.alt = "QR Code 2FA";
+                img.style.cssText = "background:white;padding:12px;border-radius:10px;display:block;max-width:220px;";
+                qrWrap.appendChild(img);
+              }
+            }
+          );
         }
       }
     );
