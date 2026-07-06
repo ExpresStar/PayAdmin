@@ -389,6 +389,13 @@
                   <label>结束日期</label>
                   <input type="date" id="f-date-to" />
                 </div>
+                <div class="filter-item">
+                  <label>金额范围 (VND)</label>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                    <input type="number" id="f-amount-min" placeholder="最小金额" min="0" />
+                    <input type="number" id="f-amount-max" placeholder="最大金额" min="0" />
+                  </div>
+                </div>
               </div>
               <div class="filter-buttons">
                 <button class="fbtn fbtn-search" onclick="searchTransactions()">
@@ -563,6 +570,13 @@
                     id="h-admin"
                     placeholder="搜索管理员或 System..."
                   />
+                </div>
+                <div class="filter-item">
+                  <label>金额范围 (VND)</label>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                    <input type="number" id="h-amount-min" placeholder="最小金额" min="0" />
+                    <input type="number" id="h-amount-max" placeholder="最大金额" min="0" />
+                  </div>
                 </div>
               </div>
 

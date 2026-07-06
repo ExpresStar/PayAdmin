@@ -1026,6 +1026,8 @@ async function loadTransactions() {
   const fBank = document.getElementById("f-bank")?.value || "";
   const fDateFrom = document.getElementById("f-date-from")?.value || "";
   const fDateTo = document.getElementById("f-date-to")?.value || "";
+  const fAmountMin = document.getElementById("f-amount-min")?.value ? parseInt(document.getElementById("f-amount-min").value) : null;
+  const fAmountMax = document.getElementById("f-amount-max")?.value ? parseInt(document.getElementById("f-amount-max").value) : null;
 
   let query = sb
     .from("transactions")
@@ -1050,6 +1052,8 @@ async function loadTransactions() {
     const localEnd = new Date(fDateTo + "T23:59:59");
     query = query.lte("created_at", localEnd.toISOString());
   }
+  if (fAmountMin !== null) query = query.gte("amount", fAmountMin);
+  if (fAmountMax !== null) query = query.lte("amount", fAmountMax);
 
   const from = (currentPage - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
