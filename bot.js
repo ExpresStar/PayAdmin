@@ -37,17 +37,18 @@ const ABSENSI_BOTS = [
   "anan88",
 ];
 
-const REJECT_BOTS = [
-  "willy@admin.com",
-  "bil_scanner",
-];
+// ✗ REJECT_BOTS DISABLED — workers handle reject room manually
+// const REJECT_BOTS = [
+//   "willy@admin.com",
+//   "bil_scanner",
+// ];
 
 // ─────────────────────────────────────────────────────────
 //  TIMING CONSTANTS
 // ─────────────────────────────────────────────────────────
 
-const WORK_START_HOUR = 8;
-const WORK_END_HOUR   = 18;
+const WORK_START_HOUR = 8;   // Normal shift start
+const WORK_END_HOUR   = 18;  // Normal shift end
 const WC_DURATION_MS    = 15 * 60 * 1000;
 const MAKAN_DURATION_MS = 30 * 60 * 1000;
 
@@ -103,11 +104,16 @@ function getJakarta(d = new Date()) {
 }
 
 function msUntilJakartaHour(targetHour, jitterMs = 0) {
-  const jkt        = getJakarta();
-  const nowMins    = jkt.totalMins;
-  const targetMins = targetHour * 60;
-  let diffMins     = targetMins - nowMins;
-  if (diffMins < 0) diffMins += 24 * 60;
+  const jkt = getJakarta();
+  const nowHour = jkt.hour;
+  
+  // Kalau target hour sudah lewat hari ini, trigger immediately
+  if (nowHour >= targetHour) {
+    return jitterMs > 0 ? Math.max(0, jitterMs) : 0;
+  }
+  
+  // Kalau belum, hitung sampai jam target hari ini
+  const diffMins = (targetHour - nowHour) * 60 - jkt.minute;
   const diffMs = diffMins * 60 * 1000;
   return Math.max(0, diffMs + jitterMs);
 }
@@ -151,15 +157,23 @@ async function insertMsg({ username, message, type, room }) {
     return false;
   }
 
-  const { error } = await sb
-    .from("messages")
-    .insert([{ username, message, type, room }]);
+  console.log(`[MSG INSERT] Attempting: ${username} → ${room} (${type})`);
 
-  if (error) {
-    console.error(`[MSG ERROR] [${username}→${room}]:`, error.message);
+  try {
+    const { data, error } = await sb
+      .from("messages")
+      .insert([{ username, message, type, room }]);
+
+    if (error) {
+      console.error(`[MSG ERROR] [${username}→${room}]:`, error.code, error.message);
+      return false;
+    }
+    console.log(`[MSG SUCCESS] ${username} posted to ${room}`);
+    return true;
+  } catch (err) {
+    console.error(`[MSG CATCH] ${username}:`, err.message);
     return false;
   }
-  return true;
 }
 
 async function fetchPendingTx(limit = 5) {
@@ -448,7 +462,7 @@ async function main() {
 ║            PayAdmin — Bot System v2               ║
 ║  Started at : ${startTime} WIB               ║
 ║  Absensi    : [${ABSENSI_BOTS.join(", ")}]    ║
-║  Reject     : [${REJECT_BOTS.join(", ")}]    ║
+║  Reject     : ✗ DISABLED (manual workflow)       ║
 ║  Worker     : ✗  (bots are 100% silent here)     ║
 ╚═══════════════════════════════════════════════════╝
 `);
@@ -465,15 +479,7 @@ async function main() {
     );
   });
 
-  REJECT_BOTS.forEach((name, i) => {
-    const delay = i * randInt(15, 45) * 1000;
-    tasks.push(
-      sleep(delay).then(() => {
-        console.log(`[INIT] RejectBot  "${name}" starting in ${delay / 1000}s`);
-        return new RejectBot(name).run();
-      })
-    );
-  });
+  // ✗ REJECT_BOTS DISABLED — workers handle reject room manually via chat upload
 
   const results = await Promise.allSettled(tasks);
   results.forEach((r, i) => {
