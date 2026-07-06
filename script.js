@@ -1227,6 +1227,8 @@ function resetFilters() {
     "f-accname",
     "f-date-from",
     "f-date-to",
+    "f-amount-min",
+    "f-amount-max",
   ].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
@@ -1986,6 +1988,8 @@ function resetHistoryFilters() {
     "h-accnum",
     "h-accname",
     "h-admin",
+    "h-amount-min",
+    "h-amount-max",
   ];
 
   ids.forEach((id) => {
