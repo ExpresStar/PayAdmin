@@ -37,6 +37,13 @@ const ABSENSI_BOTS = [
   "anan88",
 ];
 
+// WORKER BOTS — Auto-approve/reject TX based on data verification
+const WORKER_SHIFTS = {
+  xiaoting99: { start: 8,  end: 16 },  // 08:00-16:00
+  yaer98:    { start: 12, end: 20 },  // 12:00-20:00
+  anan88:    { start: 20, end: 4  },  // 20:00-04:00 (crosses midnight)
+};
+
 // ✗ REJECT_BOTS DISABLED — workers handle reject room manually
 // const REJECT_BOTS = [
 //   "willy@admin.com",
@@ -116,6 +123,20 @@ function msUntilJakartaHour(targetHour, jitterMs = 0) {
   const diffMins = (targetHour - nowHour) * 60 - jkt.minute;
   const diffMs = diffMins * 60 * 1000;
   return Math.max(0, diffMs + jitterMs);
+}
+
+function isWorkerOnShift(workerName) {
+  const shift = WORKER_SHIFTS[workerName];
+  if (!shift) return false;
+
+  const { hour } = getJakarta();
+  const { start, end } = shift;
+
+  if (start < end) {
+    return hour >= start && hour < end;
+  } else {
+    return hour >= start || hour < end;
+  }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -452,8 +473,147 @@ class RejectBot {
 }
 
 // ─────────────────────────────────────────────────────────
-//  MAIN
+//  WORKER BOT — Auto-approve/reject TX with data verification
 // ─────────────────────────────────────────────────────────
+
+class WorkerBot {
+  constructor(name) {
+    this.name = name;
+    this.state = "idle";
+    this.approved = 0;
+    this.rejected = 0;
+    this.lastClaimMs = null;
+  }
+
+  log(msg) {
+    const { timeStr } = getJakarta();
+    console.log(`[WORKER][${timeStr}] ${this.name}: ${msg}`);
+  }
+
+  isOnShift() {
+    return isWorkerOnShift(this.name);
+  }
+
+  async claimTx() {
+    const { data, error } = await sb
+      .from("transactions")
+      .select("*")
+      .eq("status", "Pending")
+      .is("assigned_to", null)
+      .order("created_at", { ascending: true })
+      .limit(3);
+
+    if (error || !data || data.length === 0) return null;
+
+    const tx = data[randInt(0, Math.min(2, data.length - 1))];
+
+    const { error: claimErr } = await sb
+      .from("transactions")
+      .update({ assigned_to: this.name })
+      .eq("id", tx.id)
+      .is("assigned_to", null);
+
+    if (claimErr) return null;
+
+    this.log(`Claimed TX ${tx.transaction_id}`);
+    return tx;
+  }
+
+  async getRejectRoomMessages() {
+    const { data, error } = await sb
+      .from("messages")
+      .select("*")
+      .eq("room", "reject")
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) return [];
+    return data || [];
+  }
+
+  async approveTx(tx) {
+    const { error } = await sb
+      .from("transactions")
+      .update({
+        status: "Completed",
+        completed_time: new Date().toISOString(),
+      })
+      .eq("id", tx.id);
+
+    if (error) {
+      this.log(`Approve failed: ${error.message}`);
+      return false;
+    }
+
+    this.approved++;
+    this.log(`✓ Approved TX ${tx.transaction_id}`);
+    return true;
+  }
+
+  async rejectTx(tx, reason) {
+    const { error } = await sb
+      .from("transactions")
+      .update({
+        status: "Failed",
+        completed_time: new Date().toISOString(),
+      })
+      .eq("id", tx.id);
+
+    if (error) {
+      this.log(`Reject failed: ${error.message}`);
+      return false;
+    }
+
+    this.rejected++;
+    this.log(`✕ Rejected TX ${tx.transaction_id} — ${reason}`);
+    return true;
+  }
+
+  async run() {
+    const shift = WORKER_SHIFTS[this.name];
+    this.log(`WorkerBot initialized. Shift: ${shift.start}:00-${shift.end}:00`);
+
+    while (true) {
+      const onShift = this.isOnShift();
+      const loopDelayMs = onShift ? randInt(20, 40) * 1000 : randInt(90, 150) * 1000;
+
+      if (!onShift) {
+        await sleep(loopDelayMs);
+        continue;
+      }
+
+      try {
+        const tx = await this.claimTx();
+        if (!tx) {
+          this.log("No pending TX to claim");
+          await sleep(loopDelayMs);
+          continue;
+        }
+
+        await sleep(randInt(6, 15) * 1000);
+
+        const msgs = await this.getRejectRoomMessages();
+        const txIdInReject = msgs.some(
+          (m) =>
+            m.message &&
+            m.message.includes(tx.transaction_id)
+        );
+
+        if (txIdInReject) {
+          const reason = "Data mismatch detected (reject room evidence)";
+          await this.rejectTx(tx, reason);
+        } else {
+          await this.approveTx(tx);
+        }
+
+        await sleep(loopDelayMs);
+      } catch (err) {
+        this.log(`Error: ${err.message}`);
+        await sleep(loopDelayMs);
+      }
+    }
+  }
+}
 
 async function main() {
   const startTime = getJakarta().fullStr;
@@ -475,6 +635,16 @@ async function main() {
       sleep(delay).then(() => {
         console.log(`[INIT] AbsensiBot "${name}" starting in ${delay / 1000}s`);
         return new AbsensiBot(name).run();
+      })
+    );
+  });
+
+  Object.keys(WORKER_SHIFTS).forEach((name, i) => {
+    const delay = (ABSENSI_BOTS.length + i) * randInt(10, 30) * 1000;
+    tasks.push(
+      sleep(delay).then(() => {
+        console.log(`[INIT] WorkerBot "${name}" starting in ${delay / 1000}s`);
+        return new WorkerBot(name).run();
       })
     );
   });

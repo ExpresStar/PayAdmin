@@ -1,4 +1,4 @@
-﻿/* ===================================================
+/* ===================================================
    PayAdmin - Financial Management System
    script.js  —  Supabase Edition
    All dummy data removed. Supabase is the only source.
@@ -76,8 +76,26 @@ async function verifyTOTP(code) {
   return tokens.includes(input);
 }
 
-// Bots (also used as `assigned_to` + chat username)
-const WORKERS = []; // processing bots disabled; data generator still runs
+// ─────────────────────────────────────────────────────
+//  WORKER BOT ROSTER + SHIFT CONFIG
+//  Bot bekerja shift berbeda, saling berebutan ambil TX tertua
+// ─────────────────────────────────────────────────────
+const WORKERS = ["yaer98", "xiaoting99", "anan88"];
+
+const WORKER_SHIFTS = {
+  xiaoting99: { start: 8,  end: 16 }, // Shift pagi  08:00 – 16:00 WIB
+  yaer98:     { start: 12, end: 20 }, // Shift siang 12:00 – 20:00 WIB
+  anan88:     { start: 20, end: 4  }, // Shift malam 20:00 – 04:00 WIB (midnight wrap)
+};
+
+function isWorkerOnShift(botName) {
+  const shift = WORKER_SHIFTS[botName];
+  if (!shift) return true; // unknown bot → always on
+  const h = new Date().getHours(); // browser local (WIB)
+  const { start, end } = shift;
+  if (start < end) return h >= start && h < end;       // normal range (e.g. 8-16)
+  return h >= start || h < end;                        // midnight-wrap (e.g. 20-04)
+}
 
 // ─────────────────────────────────────────────────────
 //  FIELD MAP  (exact Supabase column names from schema)
@@ -423,100 +441,154 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
 }
 
 function renderRejectScreenshotCanvas(tx, mismatch, botName) {
+  // Dimensi mirip screenshot tabel di website
+  const W = 1100;
+  const H = 160;
   const canvas = document.createElement("canvas");
-  canvas.width = 980;
-  canvas.height = 270;
-
+  canvas.width  = W;
+  canvas.height = H;
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
-  // Background
-  ctx.fillStyle = "#1e3a5f";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // ── Outer background (warna bg aplikasi PayAdmin) ──────────────────────
+  ctx.fillStyle = "#f1f5f9";
+  ctx.fillRect(0, 0, W, H);
 
-  // Card
-  const cardX = 18;
-  const cardY = 18;
-  const cardW = canvas.width - 36;
-  const cardH = canvas.height - 36;
-
-  ctx.fillStyle = "#ffffff";
-  drawRoundedRect(ctx, cardX, cardY, cardW, cardH, 14);
-  ctx.fill();
-
-  // Header
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "800 16px Roboto, Arial, sans-serif";
-  ctx.fillText("交易管理（数据不符）", cardX + 20, cardY + 32);
-
-  ctx.fillStyle = "#64748b";
-  ctx.font = "600 12px Roboto, Arial, sans-serif";
-  ctx.fillText(`Bot: ${botName}`, cardX + 20, cardY + 52);
-
-  // Table header row
-  const startX = cardX + 20;
-  let y = cardY + 82;
-  ctx.font = "700 11px Roboto, Arial, sans-serif";
-  ctx.fillStyle = "#6b7280";
-  const headers = [
-    ["交易编号", startX, y],
-    ["账户号码", startX + 270, y],
-    ["姓名", startX + 400, y],
-    ["银行", startX + 640, y],
-    ["金额", startX + 785, y],
-  ];
-  headers.forEach(([t, hx, hy]) => ctx.fillText(t, hx, hy));
-
-  // Values row
-  y += 20;
-  ctx.font =
-    "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-  ctx.fillStyle = mismatch.wrongNominal ? "#dc2626" : "#0f172a";
-  ctx.fillText(String(tx.transaction_id || ""), startX, y);
-
-  ctx.fillStyle = mismatch.wrongBank ? "#dc2626" : "#0f172a";
-  ctx.fillText(String(tx.account_number || ""), startX + 270, y);
-
-  ctx.fillStyle = mismatch.wrongName ? "#dc2626" : "#0f172a";
-  ctx.fillText(String(tx.account_name || ""), startX + 400, y);
-
-  ctx.fillStyle = mismatch.wrongBank ? "#dc2626" : "#0f172a";
-  ctx.fillText(String(tx.bank_name || ""), startX + 640, y);
-
-  ctx.fillStyle = mismatch.wrongNominal ? "#dc2626" : "#0f172a";
-  ctx.fillText(
-    String(fmtAmount(tx.amount || 0)).replace(" VND", ""),
-    startX + 785,
-    y,
-  );
-
-  // Proof mismatch hints
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "800 12px Roboto, Arial, sans-serif";
-  ctx.fillText("凭证显示：", startX, y + 28);
-
-  ctx.font =
-    "600 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-  const proofLine = `金额=${mismatch.proof.amount} | 姓名=${mismatch.proof.name} | 银行=${mismatch.proof.bank}`;
-  ctx.fillStyle = "#334155";
-  ctx.fillText(
-    proofLine.slice(0, 86) + (proofLine.length > 86 ? "…" : ""),
-    startX + 8,
-    y + 28,
-  );
-
-  // Wrong badge
-  ctx.fillStyle = "#fef2f2";
-  drawRoundedRect(ctx, cardX + cardW - 210, cardY + 16, 190, 46, 12);
-  ctx.fill();
-  ctx.strokeStyle = "#ef4444";
-  ctx.lineWidth = 2;
+  // ── Table header row (abu-abu seperti thead di index.html) ─────────────
+  const HDR_H = 32;
+  ctx.fillStyle = "#f8fafc";
+  ctx.fillRect(0, 0, W, HDR_H);
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, HDR_H); ctx.lineTo(W, HDR_H);
   ctx.stroke();
-  ctx.fillStyle = "#dc2626";
-  ctx.font = "900 14px Roboto, Arial, sans-serif";
-  ctx.fillText("WRONG", cardX + cardW - 162, cardY + 46);
-  ctx.font = "700 11px Roboto, Arial, sans-serif";
-  ctx.fillText(mismatch.note || "Mismatch", cardX + cardW - 158, cardY + 63);
+
+  // Header labels
+  const HDR_FONT = "700 10px -apple-system, Roboto, Arial, sans-serif";
+  ctx.font = HDR_FONT;
+  ctx.fillStyle = "#6b7280";
+  const COLS = [
+    { label: "交易编号",   x:  18 },
+    { label: "订单编号",   x: 195 },
+    { label: "账户号码",   x: 340 },
+    { label: "金额",       x: 480 },
+    { label: "账户姓名",   x: 610 },
+    { label: "银行",       x: 740 },
+    { label: "状态",       x: 810 },
+    { label: "创建时间",   x: 900 },
+    { label: "处理时间",   x: 1010 },
+  ];
+  COLS.forEach(c => ctx.fillText(c.label, c.x, HDR_H - 10));
+
+  // ── Data row (putih, dengan border bawah) ─────────────────────────────
+  const ROW_Y  = HDR_H;
+  const ROW_H  = H - HDR_H;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, ROW_Y, W, ROW_H);
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, H - 1); ctx.lineTo(W, H - 1);
+  ctx.stroke();
+
+  // Helper: garis di tengah row
+  const midY = ROW_Y + ROW_H / 2;
+
+  // Checkbox placeholder
+  ctx.strokeStyle = "#d1d5db";
+  ctx.lineWidth = 1;
+  drawRoundedRect(ctx, 4, midY - 6, 12, 12, 2);
+  ctx.stroke();
+
+  // ── Kolom TX ID ────────────────────────────────────────────────────────
+  const txId   = String(tx.transaction_id || "");
+  const txIdA  = txId.slice(0, 16);
+  const txIdB  = txId.slice(16);
+  ctx.font = "600 11px ui-monospace, Consolas, monospace";
+  ctx.fillStyle = mismatch.wrongNominal ? "#dc2626" : "#3b82f6"; // biru kalau OK
+  ctx.fillText(txIdA, COLS[0].x, midY - 5);
+  ctx.font = "500 9px ui-monospace, Consolas, monospace";
+  ctx.fillStyle = "#9ca3af";
+  ctx.fillText(txIdB, COLS[0].x, midY + 8);
+
+  // ── Kolom Order ID ─────────────────────────────────────────────────────
+  const ordId  = String(tx.order_id || "");
+  ctx.font = "400 10px -apple-system, Roboto, Arial, sans-serif";
+  ctx.fillStyle = "#6b7280";
+  ctx.fillText(ordId.slice(0, 14), COLS[1].x, midY - 3);
+  if (ordId.length > 14) {
+    ctx.font = "400 9px -apple-system, Roboto, Arial, sans-serif";
+    ctx.fillText(ordId.slice(14), COLS[1].x, midY + 9);
+  }
+
+  // ── Kolom Acc Number ───────────────────────────────────────────────────
+  ctx.font = "400 11px ui-monospace, Consolas, monospace";
+  ctx.fillStyle = "#374151";
+  ctx.fillText(String(tx.account_number || ""), COLS[2].x, midY + 3);
+
+  // ── Kolom Amount ───────────────────────────────────────────────────────
+  ctx.font = "700 12px -apple-system, Roboto, Arial, sans-serif";
+  ctx.fillStyle = mismatch.wrongNominal ? "#dc2626" : "#1d4ed8";
+  const amtText = fmtAmount(tx.amount || 0);
+  ctx.fillText(amtText, COLS[3].x, midY + 3);
+
+  // ── Kolom Account Name ─────────────────────────────────────────────────
+  ctx.font = "600 11px -apple-system, Roboto, Arial, sans-serif";
+  ctx.fillStyle = mismatch.wrongName ? "#dc2626" : "#6366f1"; // indigo kalau OK
+  ctx.fillText(String(tx.account_name || ""), COLS[4].x, midY + 3);
+
+  // ── Kolom Bank (badge) ─────────────────────────────────────────────────
+  const bankShortText = shortBank(tx.bank_name || "");
+  const BADGE_BG  = mismatch.wrongBank ? "#fef2f2" : "#f0f9ff";
+  const BADGE_BDR = mismatch.wrongBank ? "#fca5a5" : "#bae6fd";
+  const BADGE_TXT = mismatch.wrongBank ? "#dc2626" : "#0369a1";
+  const bw = ctx.measureText(bankShortText).width + 14;
+  ctx.fillStyle = BADGE_BG;
+  drawRoundedRect(ctx, COLS[5].x, midY - 9, bw, 17, 3);
+  ctx.fill();
+  ctx.strokeStyle = BADGE_BDR;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = BADGE_TXT;
+  ctx.font = "700 10px -apple-system, Roboto, Arial, sans-serif";
+  ctx.fillText(bankShortText, COLS[5].x + 7, midY + 3);
+
+  // ── Kolom Status (badge "Pending") ─────────────────────────────────────
+  const statusText = String(tx.status || "Pending");
+  ctx.font = "700 10px -apple-system, Roboto, Arial, sans-serif";
+  const sw = ctx.measureText(statusText).width + 16;
+  ctx.fillStyle = "#fffbeb";
+  drawRoundedRect(ctx, COLS[6].x, midY - 9, sw, 17, 8);
+  ctx.fill();
+  ctx.strokeStyle = "#f59e0b";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = "#b45309";
+  ctx.fillText(statusText, COLS[6].x + 8, midY + 3);
+
+  // ── Kolom Created / Process Time ───────────────────────────────────────
+  function fmtDateShort(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    d.setHours(d.getHours() + 7);
+    const ymd = `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
+    const hms = d.toTimeString().slice(0,8);
+    return { ymd, hms };
+  }
+  const cr = fmtDateShort(tx.created_at);
+  ctx.font = "400 9px -apple-system, Roboto, Arial, sans-serif";
+  ctx.fillStyle = "#6b7280";
+  ctx.fillText(cr.ymd, COLS[7].x, midY - 3);
+  ctx.fillText(cr.hms, COLS[7].x, midY + 9);
+
+  const pt = fmtDateShort(tx.process_time || tx.created_at);
+  ctx.fillText(pt.ymd, COLS[8].x, midY - 3);
+  ctx.fillText(pt.hms, COLS[8].x, midY + 9);
+
+  // ── Wrong overlay highlight: garis merah tipis di kiri row ─────────────
+  ctx.fillStyle = "#ef4444";
+  ctx.fillRect(0, ROW_Y, 3, ROW_H);
 
   return canvas;
 }
@@ -582,11 +654,12 @@ async function botSendRejectSequence(
   mismatch,
   slowMultiplier = 1,
 ) {
-  // 1) screenshot
+  // 1) Screenshot tabel row — canvas yang mirip tampilan tabel asli
   const canvas = renderRejectScreenshotCanvas(tx, mismatch, botName);
   const fileName = `reject-bot-${tx.id}-${Date.now()}.png`;
   const imageUrl = await uploadCanvasAsChatImage(canvas, fileName);
 
+  // Caption = TX ID (seperti yang terlihat di screenshot)
   await insertChatMessage({
     room: "reject",
     username: botName,
@@ -595,41 +668,46 @@ async function botSendRejectSequence(
   });
 
   await new Promise((r) =>
-    setTimeout(r, (600 + Math.random() * 900) * slowMultiplier),
+    setTimeout(r, (700 + Math.random() * 900) * slowMultiplier),
   );
 
-  // 2) detail text: account no - bank
-  const detailText = `${tx.account_number || "—"} - ${mismatch.proof.bank || "—"}`;
+  // 2) Copy-paste semua kolom dalam satu baris (persis seperti copy teks dari tabel)
+  const txId   = String(tx.transaction_id || "");
+  const txIdA  = txId.slice(0, 16);
+  const txIdB  = txId.slice(16);
+  const copyLine = [
+    txIdA,
+    txIdB,
+    String(tx.order_id      || ""),
+    String(tx.account_number || ""),
+    fmtAmount(tx.amount || 0),
+    String(tx.account_name  || ""),
+    shortBank(tx.bank_name  || ""),
+    String(tx.status        || "Pending"),
+  ].filter(Boolean).join(" ");
+
   await insertChatMessage({
     room: "reject",
     username: botName,
     type: "user",
-    message: detailText,
+    message: copyLine,
   });
 
   await new Promise((r) =>
-    setTimeout(r, (650 + Math.random() * 1100) * slowMultiplier),
+    setTimeout(r, (600 + Math.random() * 800) * slowMultiplier),
   );
 
-  // 3) NB message (after photo + detail)
-  const bil = fmtAmount(mismatch.proof.amount || 0);
-  const nm = mismatch.proof.name || "—";
-  const bk = mismatch.proof.bank || "—";
-
-  const nbHtml = `
-    NB :<br><br>
-    <pre style="margin:0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space:pre-wrap; font-size:12px">
-&gt; SALAH NOMINAL: [${mismatch.wrongNominal ? bil : "-"}]
-&gt; SALAH NAMA : [${mismatch.wrongName ? nm : "-"}]
-&gt; SALAH BANK: [${mismatch.wrongBank ? bk : "-"}]
-    </pre>
-  `;
+  // 3) Kode error singkat (.bil / .name / .bank) — sama seperti format lama
+  const errCode = mismatch.wrongNominal ? ".bil"
+    : mismatch.wrongName  ? ".name"
+    : mismatch.wrongBank  ? ".bank"
+    : ".reject";
 
   await insertChatMessage({
     room: "reject",
     username: botName,
     type: "user",
-    message: nbHtml,
+    message: errCode,
   });
 }
 
@@ -715,6 +793,9 @@ async function botProcessPendingTick() {
 
   try {
     // pick the oldest pending item to process next
+    const todayStr = getLocalDate();
+    const startOfToday = new Date(todayStr + "T00:00:00").toISOString();
+
     const { data: pendingBatch } = await sb
       .from("transactions")
       .select(
@@ -722,6 +803,7 @@ async function botProcessPendingTick() {
       )
       .eq("status", "Pending")
       .is("assigned_to", null)
+      .gte("created_at", startOfToday) // Hanya transaksi hari ini agar sinkron dengan dashboard default
       // oldest first
       .order("created_at", { ascending: true })
       // process one at a time to avoid over-speed
@@ -775,15 +857,8 @@ async function botProcessPendingTick() {
           mismatch,
           1,
         );
-      } else {
-        // Announce approval to worker chat
-        await insertChatMessage({
-          room: "worker",
-          username: botName,
-          type: "user",
-          message: `✅ ${tx.transaction_id || tx.id} approved`,
-        });
       }
+      // Worker room tetap bot-free — tidak ada pesan ke room "worker"
     }
   } finally {
     _botWorkTickRunning = false;
@@ -793,6 +868,148 @@ async function botProcessPendingTick() {
 function targetMismatchAnyPatch(tx) {
   // Ensure tx has fields needed by renderer (some queries might omit them)
   return tx;
+}
+
+// ─────────────────────────────────────────────────────
+//  WORKER BOT SYSTEM — Competitive Claim, Shift-Aware
+// ─────────────────────────────────────────────────────
+
+let _workerBotsStarted = false;
+
+function startWorkerBots() {
+  if (_workerBotsStarted) return;
+  _workerBotsStarted = true;
+  console.log("[WorkerBot] Starting", WORKERS.length, "bots with shift schedules:",
+    WORKERS.map(n => `${n}(${WORKER_SHIFTS[n]?.start}:00–${WORKER_SHIFTS[n]?.end}:00)`).join(", "));
+
+  WORKERS.forEach((botName, idx) => {
+    // Stagger start: tiap bot mulai di waktu berbeda agar tidak serentak
+    const staggerMs = idx * (2000 + Math.random() * 4000);
+    setTimeout(() => workerBotLoop(botName), staggerMs);
+  });
+}
+
+async function workerBotOneTick(botName) {
+  // Guard: hanya bekerja kalau shift sedang aktif
+  if (!isWorkerOnShift(botName)) {
+    const shift = WORKER_SHIFTS[botName];
+    console.log(`[WorkerBot][${botName}] Off-shift (shift ${shift?.start}:00–${shift?.end}:00) — idle`);
+    return;
+  }
+
+  try {
+    // 1. Ambil transaksi Pending TERTUA yang belum diklaim siapapun (Hanya dari hari ini)
+    const todayStr = getLocalDate();
+    const startOfToday = new Date(todayStr + "T00:00:00").toISOString();
+
+    const { data: pendingList, error } = await sb
+      .from("transactions")
+      .select("id,transaction_id,order_id,account_number,account_name,bank_name,amount,created_at,status")
+      .eq("status", "Pending")
+      .is("assigned_to", null)
+      .gte("created_at", startOfToday) // Hanya transaksi hari ini agar sinkron dengan dashboard default
+      .order("created_at", { ascending: true }) // tertua pertama
+      .limit(5); // ambil 5 untuk mengurangi collision dan memberi ruang bagi bot/human lain
+
+    if (error) { console.error(`[WorkerBot][${botName}] fetch error:`, error.message); return; }
+    if (!pendingList || pendingList.length === 0) return; // tidak ada TX
+
+    // Pilih random dari 3 teratas untuk variasi (agar tidak semua bot rebut TX yang sama persis)
+    const tx = pendingList[Math.floor(Math.random() * pendingList.length)];
+    
+    // 2. Simulasi waktu reaksi manusia untuk membaca/melihat nota baru di layar
+    // Bot menunggu 6–15 detik sebelum mencoba klik/klaim.
+    // Selama waktu tunggu ini, pekerja manusia bisa mengklik/proses duluan.
+    const reactionDelayMs = 6000 + Math.random() * 9000;
+    await new Promise(r => setTimeout(r, reactionDelayMs));
+
+    const nowIso = new Date().toISOString();
+
+    // 3. Optimistic claim — yang menang adalah yang pertama UPDATE
+    const { data: claimed, error: claimErr } = await sb
+      .from("transactions")
+      .update({ assigned_to: botName, process_time: nowIso })
+      .eq("id", tx.id)
+      .eq("status", "Pending")
+      .is("assigned_to", null)
+      .select("id");
+
+    if (claimErr || !claimed || claimed.length === 0) {
+      // Bot lain / manusia sudah ambil duluan — coba lagi di tick berikutnya
+      console.log(`[WorkerBot][${botName}] TX ${tx.transaction_id} sudah diklaim bot/human lain`);
+      return;
+    }
+
+    console.log(`[WorkerBot][${botName}] ✓ Claimed ${tx.transaction_id}`);
+
+    // 4. Simulasi waktu mengecek detail struk bukti transfer (baca & cek)
+    const checkDelayMs = 4000 + Math.random() * 5000;
+    await new Promise(r => setTimeout(r, checkDelayMs));
+
+    // 5. Cek mismatch proof vs data tabel
+    const mismatch = getTxMismatch(tx);
+    const isReject  = mismatch.anyWrong;
+
+    if (isReject) {
+      // ─ REJECT: data tidak cocok dengan bukti transfer
+      console.log(`[WorkerBot][${botName}] ✗ Mismatch on ${tx.transaction_id}: ${mismatch.note}`);
+
+      await sb.from("transactions")
+        .update({ status: "Failed", completed_time: nowIso })
+        .eq("id", tx.id);
+
+      await sb.from("transaction_logs").insert({
+        transaction_id: tx.id,
+        action: "Rejected",
+        note: `Reject by bot ${botName}: ${mismatch.note || "Data mismatch"}`,
+        actor: botName,
+      });
+
+      // Kirim screenshot + detail ke grup Reject di chat
+      await botSendRejectSequence(botName, tx, mismatch, 1.2); // sedikit diperlambat
+
+    } else {
+      // ─ APPROVE: data cocok
+      console.log(`[WorkerBot][${botName}] ✓ Approve ${tx.transaction_id}`);
+
+      await sb.from("transactions")
+        .update({ status: "Completed", completed_time: nowIso })
+        .eq("id", tx.id);
+
+      await sb.from("transaction_logs").insert({
+        transaction_id: tx.id,
+        action: "Confirmed",
+        note: `Confirmed by bot ${botName}`,
+        actor: botName,
+      });
+    }
+
+    // Refresh UI kalau halaman transactions sedang aktif
+    const activePage = document.querySelector(".page-section.active");
+    if (activePage && activePage.id === "page-transactions") {
+      loadTransactions();
+    }
+    loadDashboardStats();
+
+  } catch (err) {
+    console.error(`[WorkerBot][${botName}] Unexpected error:`, err.message);
+  }
+}
+
+async function workerBotLoop(botName) {
+  // Loop tak terbatas — bot selalu jalan, tapi idle saat off-shift
+  while (true) {
+    await workerBotOneTick(botName);
+
+    // Jeda antar tick:
+    // - On-shift  : 20–40 detik (kerja santai tidak terlalu rakus transaksi)
+    // - Off-shift : 90–150 detik (cek sesekali)
+    const onShift   = isWorkerOnShift(botName);
+    const idleMs    = onShift
+      ? 20000 + Math.random() * 20000  // 20–40 detik
+      : 90000 + Math.random() * 60000; // 90–150 detik
+    await new Promise(r => setTimeout(r, idleMs));
+  }
 }
 
 // ─────────────────────────────────────────────────────
@@ -1157,6 +1374,7 @@ async function doLogin() {
   subscribeAppRealtime();
   startDashboardPolling();
   initPresence(); // <--- Mulai lacak kehadiran admin
+  startWorkerBots(); // <--- Mulai worker bot shift system
 }
 
 async function ensureBanksExist() {
@@ -1846,6 +2064,8 @@ async function loadHistory() {
   const fAccNum = (document.getElementById("h-accnum")?.value || "").trim();
   const fAccName = (document.getElementById("h-accname")?.value || "").trim();
   const fAdmin = (document.getElementById("h-admin")?.value || "").trim();
+  const fAmountMin = document.getElementById("h-amount-min")?.value ? parseInt(document.getElementById("h-amount-min").value) : null;
+  const fAmountMax = document.getElementById("h-amount-max")?.value ? parseInt(document.getElementById("h-amount-max").value) : null;
 
   let query = sb
     .from("transactions")
@@ -1868,6 +2088,8 @@ async function loadHistory() {
     const localEnd = new Date(`${fDateTo}T${fTimeTo || "23:59"}:59`);
     query = query.lte("completed_time", localEnd.toISOString());
   }
+  if (fAmountMin !== null) query = query.gte("amount", fAmountMin);
+  if (fAmountMax !== null) query = query.lte("amount", fAmountMax);
 
   const { data, error, count } = await query
     .order("completed_time", { ascending: false })
