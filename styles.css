@@ -13,7 +13,7 @@
   --border: #dde1e7;
   --text: #222;
   --text-muted: #6b7280;
-  --font: 'Inter', 'Segoe UI', sans-serif;
+  --font: 'Roboto', 'Segoe UI', sans-serif;
 
   --status-pending: #f59e0b;
   --status-processing: #3b82f6;
@@ -261,8 +261,8 @@ tbody td {
   border-right: 1px solid #f0f2f5;
 }
 tbody td:last-child { border-right: none; }
-.td-id { font-family: monospace; font-size: 11px; color: #374151; }
-.td-order { font-family: monospace; font-size: 10px; color: #1a7dc4; font-weight: 600; }
+.td-id { font-family: var(--font); font-size: 11px; color: #374151; }
+.td-order { font-family: var(--font); font-size: 10px; color: #1a7dc4; font-weight: 600; }
 .td-amount { font-weight: 700; color: #111; text-align: center; font-size: 11px; }
 .td-name { font-weight: 600; }
 .td-time { font-size: 10px; color: #6b7280; line-height: 1.4; }

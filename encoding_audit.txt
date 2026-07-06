@@ -1,0 +1,6 @@
+script.js:805:   filteredTotal = count ?? 0;
+script.js:806:   txCache = data ?? [];
+script.js:2434:     ["\xe4\xbb\u0160\xe5\xa4\xa9", todayData],
+script.js:2435:     ["\xe6\u0153\xac\xe5\u2018\xa8", weekData],
+script.js:2436:     ["\xe6\u0153\xac\xe6\u0153\u02c6", monthData],
+script.js:2437:     ["\xe5\u2026\xa8\xe9\u0192\xa8\xe6\u2014\xb6\xe9\u2014\xb4", data],

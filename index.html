@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PayAdmin — Financial Management System</title>
+    <title>PayAdmin — 财务管理系统</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="styles.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap"
       rel="stylesheet"
     />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -22,22 +22,22 @@
         <div class="login-logo">
           <img src="favicon.png" alt="Logo" style="width: 80px; height: 80px; margin-bottom: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3)">
           <h2>PayAdmin</h2>
-          <p>Financial Management System</p>
+          <p>财务管理系统</p>
         </div>
         <div class="login-error" id="login-error">
-          ⚠ Please fill in all fields correctly.
+          ⚠ 请正确填写所有字段。
         </div>
         <div class="form-group">
-          <label>Username</label>
+          <label>用户名</label>
           <input
             type="text"
             id="login-user"
-            placeholder=""
+            placeholder="例如: willy"
             autocomplete="username"
           />
         </div>
         <div class="form-group">
-          <label>Password</label>
+          <label>密码</label>
           <input
             type="password"
             id="login-pass"
@@ -47,7 +47,7 @@
         </div>
 
         <div class="form-group" id="2fa-group" style="margin-bottom: 20px;">
-          <label>Google 2FA Code</label>
+          <label>Google 双重验证码</label>
           <input
             type="text"
             id="login-2fa"
@@ -60,7 +60,7 @@
           />
         </div>
 
-        <button class="login-btn" onclick="doLogin()">Log In</button>
+        <button class="login-btn" onclick="doLogin()">登录</button>
         <p
           style="
             text-align: center;
@@ -69,8 +69,7 @@
             margin-top: 12px;
           "
         >
-          PayAdmin is a secure internal tool. Please login with your
-          administrator
+          PayAdmin 是内部安全工具。请使用管理员账号登录
         </p>
       </div>
     </div>
@@ -85,7 +84,7 @@
           <button
             class="sidebar-toggle-btn"
             onclick="toggleSidebar()"
-            title="Toggle sidebar"
+            title="切换侧边栏"
           >
             ☰
           </button>
@@ -94,27 +93,27 @@
           <div class="user-avatar" id="user-avatar-text">AD</div>
           <div class="user-info nav-label">
             <div class="user-name" id="sidebar-username">admin</div>
-            <div class="user-role">Administrator</div>
+            <div class="user-role">管理员</div>
           </div>
         </div>
         <div class="sidebar-nav">
-          <div class="nav-section-label">Main</div>
+          <div class="nav-section-label">主页</div>
           <div
             class="nav-item active"
             data-page="dashboard"
             onclick="switchPage('dashboard', this)"
           >
             <span class="nav-icon">🏠</span>
-            <span class="nav-label">Dashboard</span>
+            <span class="nav-label">仪表盘</span>
           </div>
-          <div class="nav-section-label">Operations</div>
+          <div class="nav-section-label">操作</div>
           <div
             class="nav-item"
             data-page="transactions"
             onclick="switchPage('transactions', this)"
           >
             <span class="nav-icon">📋</span>
-            <span class="nav-label">Transaction Mgmt</span>
+            <span class="nav-label">交易管理</span>
           </div>
           <!-- ===== BANKS ===== -->
           <div
@@ -123,7 +122,7 @@
             onclick="switchPage('banks', this)"
           >
             <span class="nav-icon">🏦</span>
-            <span class="nav-label">Bank Mgmt</span>
+            <span class="nav-label">银行管理</span>
           </div>
           <div
             class="nav-item"
@@ -131,27 +130,27 @@
             onclick="switchPage('history', this)"
           >
             <span class="nav-icon">🕘</span>
-            <span class="nav-label">History</span>
+            <span class="nav-label">历史记录</span>
           </div>
 
-          <div class="nav-section-label">Analytics</div>
+          <div class="nav-section-label">分析</div>
           <div
             class="nav-item"
             data-page="reports"
             onclick="switchPage('reports', this)"
           >
             <span class="nav-icon">📊</span>
-            <span class="nav-label">Reports</span>
+            <span class="nav-label">报表</span>
           </div>
 
-          <div class="nav-section-label">Communication</div>
+          <div class="nav-section-label">沟通</div>
           <div
             class="nav-item"
             onclick="window.open('chat.html', '_blank')"
             style="cursor:pointer"
           >
             <span class="nav-icon">💬</span>
-            <span class="nav-label">Chat</span>
+            <span class="nav-label">聊天</span>
           </div>
         </div>
       </nav>
@@ -162,28 +161,28 @@
         <div id="topbar">
           <div class="topbar-breadcrumb">
             <span class="breadcrumb-home" onclick="switchPage('dashboard')"
-              >🏠 Home</span
+              >🏠 首页</span
             >
             <span class="breadcrumb-sep">›</span>
             <span class="breadcrumb-current" id="topbar-page-name"
-              >Dashboard</span
+              >仪表盘</span
             >
           </div>
           <div class="topbar-right">
             <span class="topbar-welcome"
-              >Welcome, <strong id="topbar-username">admin</strong></span
+              >欢迎，<strong id="topbar-username">admin</strong></span
             >
             <button class="topbar-fullscreen" onclick="toggleFullscreen()">
               ⛶ Full
             </button>
-            <button class="topbar-logout" onclick="doLogout()">✕ Logout</button>
+            <button class="topbar-logout" onclick="doLogout()">✕ 退出</button>
           </div>
         </div>
 
         <!-- PAGE ACTIONS -->
         <div class="page-actions-bar">
           <button class="page-action-btn" onclick="refreshTableOnly()">
-            ⟳ Refresh
+            ⟳ 刷新
           </button>
           <button class="page-action-btn" id="page-nav-prev">◀◀</button>
           <button class="page-action-btn" id="page-nav-next">▶▶</button>
@@ -198,7 +197,7 @@
                 <div class="stat-icon" style="background: #eff6ff">💳</div>
                 <div class="stat-info">
                   <h3 id="stat-total-tx">0</h3>
-                  <p>Total Transactions</p>
+                  <p>交易总数</p>
                 </div>
               </div>
 
@@ -206,21 +205,21 @@
               <div class="stat-card" style="grid-column: span 1; border: 2px dashed #e2e8f0; background: #f8fafc;">
                 <div class="stat-info">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <p style="font-weight:700; color:#475569; font-size:10px; text-transform:uppercase;">🤖 AI Engine</p>
+                    <p style="font-weight:700; color:#475569; font-size:10px; text-transform:uppercase;">🤖 AI 引擎</p>
                     <span id="bot-indicator" style="width:8px; height:8px; border-radius:50%; background:#94a3b8;"></span>
                   </div>
-                  <h3 id="bot-status-text" style="font-size:14px; color:#64748b;">OFFLINE</h3>
-                  <button id="bot-toggle-btn" class="login-btn" style="margin-top:10px; padding:6px; font-size:11px; background:#64748b;" onclick="toggleBotEngine()">START ENGINE</button>
+                  <h3 id="bot-status-text" style="font-size:14px; color:#64748b;">离线</h3>
+                  <button id="bot-toggle-btn" class="login-btn" style="margin-top:10px; padding:6px; font-size:11px; background:#64748b;" onclick="toggleBotEngine()">启动引擎</button>
                 </div>
               </div>
 
               <!-- PRESENCE ADMIN -->
               <div class="stat-card" style="grid-column: span 1; background: #f0fdf4; border: 1px solid #dcfce7;">
                 <div class="stat-info">
-                  <p style="font-weight:700; color:#166534; font-size:10px; text-transform:uppercase; margin-bottom:10px;">👤 Presence Admin</p>
+                  <p style="font-weight:700; color:#166534; font-size:10px; text-transform:uppercase; margin-bottom:10px;">👤 在线管理员</p>
                   <div id="admin-presence-list" style="display:flex; flex-direction:column; gap:6px; max-height:80px; overflow-y:auto;">
                     <!-- List online admin -->
-                    <div style="font-size:11px; color:#15803d;">Loading presence...</div>
+                    <div style="font-size:11px; color:#15803d;">正在加载在线状态...</div>
                   </div>
                 </div>
               </div>
@@ -228,29 +227,28 @@
                 <div class="stat-icon" style="background: #fef3c7">⏳</div>
                 <div class="stat-info">
                   <h3 id="stat-pending-tx" style="color: #f59e0b">0</h3>
-                  <p>Pending</p>
+                  <p>待处理</p>
                 </div>
               </div>
               <div class="stat-card">
                 <div class="stat-icon" style="background: #ecfdf5">✅</div>
                 <div class="stat-info">
                   <h3 id="stat-completed-tx" style="color: #10b981">0</h3>
-                  <p>Completed</p>
+                  <p>已完成</p>
                 </div>
               </div>
               <div class="stat-card">
                 <div class="stat-icon" style="background: #fef2f2">❌</div>
                 <div class="stat-info">
                   <h3 id="stat-failed-tx" style="color: #ef4444">0</h3>
-                  <p>Failed / Rejected</p>
+                  <p>失败 / 已拒绝</p>
                 </div>
               </div>
             </div>
             <div class="dash-recent">
-              <h3>📋 Recent Activity</h3>
+              <h3>📋 最近活动</h3>
               <p style="color: #9ca3af; font-size: 11px">
-                → Navigate to <strong>Transaction Management</strong> to view
-                and manage all transactions.
+                → 前往<strong>交易管理</strong>页面查看并管理所有交易。
               </p>
               <br />
               <div
@@ -273,10 +271,10 @@
                 >
                   <div style="font-size: 20px; margin-bottom: 4px">📋</div>
                   <div style="font-size: 12px; font-weight: 700">
-                    Transaction Management
+                    交易管理
                   </div>
                   <div style="font-size: 10px; color: #9ca3af; margin-top: 2px">
-                    View all transactions →
+                    查看全部交易 →
                   </div>
                 </div>
                 <div
@@ -291,10 +289,10 @@
                 >
                   <div style="font-size: 20px; margin-bottom: 4px">🏦</div>
                   <div style="font-size: 12px; font-weight: 700">
-                    Bank Management
+                    银行管理
                   </div>
                   <div style="font-size: 10px; color: #9ca3af; margin-top: 2px">
-                    Manage bank accounts →
+                    管理银行账户 →
                   </div>
                 </div>
                 <div
@@ -308,9 +306,9 @@
                   onclick="switchPage('reports')"
                 >
                   <div style="font-size: 20px; margin-bottom: 4px">📊</div>
-                  <div style="font-size: 12px; font-weight: 700">Reports</div>
+                  <div style="font-size: 12px; font-weight: 700">报表</div>
                   <div style="font-size: 10px; color: #9ca3af; margin-top: 2px">
-                    View reports →
+                    查看报表 →
                   </div>
                 </div>
               </div>
@@ -323,51 +321,51 @@
             <div class="filter-panel">
               <div class="filter-grid">
                 <div class="filter-item">
-                  <label>Transaction ID</label>
+                  <label>交易编号</label>
                   <input
                     type="text"
                     id="f-txid"
-                    placeholder="Search TX ID..."
+                    placeholder="搜索交易编号..."
                   />
                 </div>
                 <div class="filter-item">
-                  <label>Order ID</label>
+                  <label>订单编号</label>
                   <input
                     type="text"
                     id="f-orderid"
-                    placeholder="Search Order ID..."
+                    placeholder="搜索订单编号..."
                   />
                 </div>
                 <div class="filter-item">
-                  <label>Account Number</label>
+                  <label>账户号码</label>
                   <input
                     type="text"
                     id="f-accnum"
-                    placeholder="Account number..."
+                    placeholder="搜索账户号码..."
                   />
                 </div>
                 <div class="filter-item">
-                  <label>Account Name</label>
+                  <label>账户姓名</label>
                   <input
                     type="text"
                     id="f-accname"
-                    placeholder="Account name..."
+                    placeholder="搜索账户姓名..."
                   />
                 </div>
                 <div class="filter-item">
-                  <label>Status</label>
+                  <label>状态</label>
                   <select id="f-status">
-                    <option value="">All Status</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Processing">Processing</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Failed">Failed</option>
+                    <option value="">全部状态</option>
+                    <option value="Pending">待处理</option>
+                    <option value="Processing">处理中</option>
+                    <option value="Completed">已完成</option>
+                    <option value="Failed">失败</option>
                   </select>
                 </div>
                 <div class="filter-item">
-                  <label>Bank</label>
+                  <label>银行</label>
                   <select id="f-bank">
-                    <option value="">All Banks</option>
+                    <option value="">全部银行</option>
                     <option>Vietcombank</option>
                     <option>Techcombank</option>
                     <option>MB Bank</option>
@@ -384,26 +382,26 @@
                   </select>
                 </div>
                 <div class="filter-item">
-                  <label>Date From</label>
+                  <label>开始日期</label>
                   <input type="date" id="f-date-from" />
                 </div>
                 <div class="filter-item">
-                  <label>Date To</label>
+                  <label>结束日期</label>
                   <input type="date" id="f-date-to" />
                 </div>
               </div>
               <div class="filter-buttons">
                 <button class="fbtn fbtn-search" onclick="searchTransactions()">
-                  🔍 Search
+                  🔍 搜索
                 </button>
                 <button class="fbtn fbtn-reset" onclick="resetFilters()">
-                  ↺ Reset
+                  ↺ 重置
                 </button>
                 <button class="fbtn fbtn-today" onclick="filterToday()">
-                  📅 Today
+                  📅 今天
                 </button>
                 <button class="fbtn fbtn-yesterday" onclick="filterYesterday()">
-                  📅 Yesterday
+                  📅 昨天
                 </button>
               </div>
             </div>
@@ -413,14 +411,14 @@
               <button
                 class="toolbar-btn"
                 onclick="searchTransactions()"
-                title="Search"
+                title="搜索"
               >
                 ↺
               </button>
               <!-- <button class="toolbar-btn" onclick="buildTable()" title="Refresh">↺</button> -->
-              <button class="toolbar-btn active" title="List view">≡</button>
-              <button class="toolbar-btn" title="Grid view">⊞</button>
-              <button class="toolbar-btn" onclick="toggleFilterPanel()" title="Toggle Filters">↓</button>
+              <button class="toolbar-btn active" title="列表视图">≡</button>
+              <button class="toolbar-btn" title="网格视图">⊞</button>
+              <button class="toolbar-btn" onclick="toggleFilterPanel()" title="切换筛选器">↓</button>
             </div>
 
             <!-- TABLE -->
@@ -435,19 +433,19 @@
                         onchange="toggleAll(this)"
                       />
                     </th>
-                    <th>Transaction ID</th>
-                    <th>Order ID</th>
-                    <th>Account No.</th>
-                    <th style="text-align: right">Amount</th>
-                    <th>Account Name</th>
-                    <th>Bank</th>
-                    <th>Status</th>
-                    <th>Source</th>
-                    <th>Created</th>
-                    <th>Process Time</th>
-                    <th>Completed</th>
-                    <th>Actions</th>
-                    <th>Verify</th>
+                    <th>交易编号</th>
+                    <th>订单编号</th>
+                    <th>账户号码</th>
+                    <th style="text-align: right">金额</th>
+                    <th>账户姓名</th>
+                    <th>银行</th>
+                    <th>状态</th>
+                    <th>来源</th>
+                    <th>创建时间</th>
+                    <th>处理时间</th>
+                    <th>完成时间</th>
+                    <th>操作</th>
+                    <th>核验</th>
                   </tr>
                 </thead>
                 <tbody id="tx-tbody"></tbody>
@@ -457,7 +455,7 @@
             <!-- PAGINATION -->
             <div class="pagination-bar">
               <span id="pagination-info"
-                >Page 1 of 2 · 15 records per page · Total: 15</span
+                >第 1 页 / 共 2 页 · 每页 15 条 · 总计：15</span
               >
               <div class="pagination-btns" id="pagination-btns"></div>
             </div>
@@ -469,15 +467,15 @@
             <!-- HEADER -->
             <div class="history-header">
               <div>
-                <h2>History Transactions</h2>
-                <p>Completed & Failed transactions</p>
+                <h2>交易历史</h2>
+                <p>已完成与失败的交易</p>
               </div>
 
               <div class="history-actions">
                 <button
                   class="toolbar-btn"
                   onclick="loadHistory()"
-                  title="Refresh History"
+                  title="刷新历史记录"
                   style="height: 100%;"
                 >
                   ↺
@@ -489,29 +487,29 @@
             <div class="filter-panel" id="history-filter-panel">
               <div class="filter-grid">
                 <div class="filter-item">
-                  <label>Transaction ID</label>
-                  <input type="text" id="h-txid" placeholder="Search Txn ID..." />
+                  <label>交易编号</label>
+                  <input type="text" id="h-txid" placeholder="搜索交易编号..." />
                 </div>
                 <div class="filter-item">
-                  <label>Origin Order ID</label>
+                  <label>原始订单编号</label>
                   <input
                     type="text"
                     id="h-orderid"
-                    placeholder="Search Order ID..."
+                    placeholder="搜索订单编号..."
                   />
                 </div>
                 <div class="filter-item">
-                  <label>Status</label>
+                  <label>状态</label>
                   <select id="h-status">
-                    <option value="">All Status</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Failed">Failed</option>
+                    <option value="">全部状态</option>
+                    <option value="Completed">已完成</option>
+                    <option value="Failed">失败</option>
                   </select>
                 </div>
                 <div class="filter-item">
-                  <label>Bank</label>
+                  <label>银行</label>
                   <select id="h-bank">
-                    <option value="">All Banks</option>
+                    <option value="">全部银行</option>
                     <option>Vietcombank</option>
                     <option>Techcombank</option>
                     <option>MB Bank</option>
@@ -529,46 +527,60 @@
                 </div>
 
                 <div class="filter-item">
-                  <label>Date From</label>
-                  <input type="date" id="h-date-from" />
+                  <label>开始日期</label>
+                  <div style="display:grid;grid-template-columns:1fr 96px;gap:6px">
+                    <input type="date" id="h-date-from" />
+                    <input type="time" id="h-time-from" value="00:00" />
+                  </div>
                 </div>
                 <div class="filter-item">
-                  <label>Date To</label>
-                  <input type="date" id="h-date-to" />
+                  <label>结束日期</label>
+                  <div style="display:grid;grid-template-columns:1fr 96px;gap:6px">
+                    <input type="date" id="h-date-to" />
+                    <input type="time" id="h-time-to" value="23:59" />
+                  </div>
                 </div>
                 <div class="filter-item">
-                  <label>Account Number</label>
+                  <label>账户号码</label>
                   <input
                     type="text"
                     id="h-accnum"
-                    placeholder="Account number..."
+                    placeholder="搜索账户号码..."
                   />
                 </div>
                 <div class="filter-item">
-                  <label>Account Name</label>
+                  <label>账户姓名</label>
                   <input
                     type="text"
                     id="h-accname"
-                    placeholder="Account name..."
+                    placeholder="搜索账户姓名..."
+                  />
+                </div>
+                <div class="filter-item">
+                  <label>管理员 / 操作员</label>
+                  <input
+                    type="text"
+                    id="h-admin"
+                    placeholder="搜索管理员或 System..."
                   />
                 </div>
               </div>
 
               <div class="filter-buttons">
                 <button class="fbtn fbtn-search" onclick="searchHistory()">
-                  🔍 Search
+                  🔍 搜索
                 </button>
                 <button class="fbtn fbtn-reset" onclick="resetHistoryFilters()">
-                  ↺ Reset
+                  ↺ 重置
                 </button>
                 <button class="fbtn fbtn-today" onclick="filterHistoryToday()">
-                  📅 Today
+                  📅 今天
                 </button>
                 <button
                   class="fbtn fbtn-yesterday"
                   onclick="filterHistoryYesterday()"
                 >
-                  📅 Yesterday
+                  📅 昨天
                 </button>
               </div>
             </div>
@@ -579,14 +591,19 @@
                 <table id="history-table">
                   <thead>
                     <tr>
-                      <th>Transaction ID</th>
-                      <th>Account</th>
-                      <th>Bank</th>
-                      <th>Amount</th>
-                      <th>Status</th>
-                      <th>Completed</th>
-                      <th>Admin</th>
-                      <th>Actions</th>
+                      <th>交易编号</th>
+                      <th>订单编号</th>
+                      <th>账户号码</th>
+                      <th style="text-align: right">金额</th>
+                      <th>账户姓名</th>
+                      <th>银行</th>
+                      <th>状态</th>
+                      <th>来源</th>
+                      <th>创建时间</th>
+                      <th>处理时间</th>
+                      <th>完成时间</th>
+                      <th>管理员</th>
+                      <th>操作</th>
                     </tr>
                   </thead>
                   <tbody id="history-tbody"></tbody>
@@ -609,10 +626,10 @@
                 <h2
                   style="font-size: 15px; font-weight: 700; margin-bottom: 4px"
                 >
-                  🏦 Bank Management
+                  🏦 银行管理
                 </h2>
                 <p style="font-size: 11px; color: #9ca3af">
-                  Select the bank you want to process transactions through
+                  选择你要用于处理交易的银行
                 </p>
               </div>
             </div>
@@ -625,42 +642,42 @@
           <div class="page-section" id="page-reports">
             <div style="margin-bottom: 12px">
               <h2 style="font-size: 15px; font-weight: 700; margin-bottom: 4px">
-                📊 Reports
+                📊 报表
               </h2>
               <p style="font-size: 11px; color: #9ca3af">
-                View system reports and analytics
+                查看系统报表与分析
               </p>
             </div>
             <div class="reports-cards">
               <div class="report-card" onclick="reportTransactionSummary()">
                 <div class="report-card-icon">📈</div>
-                <h4>Transaction Summary</h4>
-                <p>Daily, weekly, monthly transaction overview</p>
+                <h4>交易汇总</h4>
+                <p>每日、每周、每月交易概览</p>
               </div>
               <div class="report-card" onclick="reportRevenue()">
                 <div class="report-card-icon">💰</div>
-                <h4>Revenue Report</h4>
-                <p>Total processed volume by bank and status</p>
+                <h4>收入报表</h4>
+                <p>按银行与状态统计处理总量</p>
               </div>
               <div class="report-card" onclick="reportBankPerformance()">
                 <div class="report-card-icon">🏦</div>
-                <h4>Bank Performance</h4>
-                <p>Success rate and processing time by bank</p>
+                <h4>银行表现</h4>
+                <p>按银行查看成功率与处理时间</p>
               </div>
               <div class="report-card" onclick="reportFailedTransactions()">
                 <div class="report-card-icon">❌</div>
-                <h4>Failed Transactions</h4>
-                <p>Rejected and failed transaction analysis</p>
+                <h4>失败交易</h4>
+                <p>被拒与失败交易分析</p>
               </div>
               <div class="report-card" onclick="reportTopAccounts()">
                 <div class="report-card-icon">👤</div>
-                <h4>Account Report</h4>
-                <p>Top accounts by transaction volume</p>
+                <h4>账户报表</h4>
+                <p>按交易量排行的账户</p>
               </div>
               <div class="report-card" onclick="reportTimeAnalysis()">
                 <div class="report-card-icon">📅</div>
-                <h4>Time Analysis</h4>
-                <p>Processing time distribution report</p>
+                <h4>时间分析</h4>
+                <p>处理时间分布报表</p>
               </div>
             </div>
           </div>
@@ -688,7 +705,7 @@
         <div class="modal-header">
           <div class="modal-title-wrap">
             <span class="modal-title-icon modal-icon-confirm">✅</span>
-            <span class="modal-title">Confirm Client Data</span>
+            <span class="modal-title">确认客户资料</span>
           </div>
           <button class="modal-close" onclick="closeModal('modal-confirm')">
             ✕
@@ -700,15 +717,15 @@
           <!-- Shared input section -->
           <div class="modal-input-section">
             <label class="modal-input-label">
-              <span class="modal-input-required">*</span> Confirmation Note
+              <span class="modal-input-required">*</span> 确认备注
               <span class="modal-input-hint" id="confirm-hint"
-                >— type to enable buttons</span
+                >— 输入后启用按钮</span
               >
             </label>
             <textarea
               class="modal-textarea"
               id="confirm-textarea"
-              placeholder="Paste or type input here..."
+              placeholder="请在此粘贴或输入内容..."
               oninput="handleModalInput('confirm')"
             ></textarea>
           </div>
@@ -720,7 +737,7 @@
             disabled
             onclick="doConfirmClient()"
           >
-            ✓ Confirm
+            ✓ 确认
           </button>
           <button
             class="modal-btn modal-btn-mcancel"
@@ -728,7 +745,7 @@
             disabled
             onclick="closeModal('modal-confirm')"
           >
-            Cancel
+            取消
           </button>
         </div>
       </div>
@@ -740,7 +757,7 @@
         <div class="modal-header">
           <div class="modal-title-wrap">
             <span class="modal-title-icon modal-icon-reject">✖</span>
-            <span class="modal-title">Reject Transaction</span>
+            <span class="modal-title">拒绝交易</span>
           </div>
           <button class="modal-close" onclick="closeModal('modal-reject')">
             ✕
@@ -750,15 +767,15 @@
           <div class="modal-info-block" id="reject-info"></div>
           <div class="modal-input-section">
             <label class="modal-input-label">
-              <span class="modal-input-required">*</span> Rejection Reason
+              <span class="modal-input-required">*</span> 拒绝原因
               <span class="modal-input-hint" id="reject-hint"
-                >— type to enable buttons</span
+                >— 输入后启用按钮</span
               >
             </label>
             <textarea
               class="modal-textarea"
               id="reject-textarea"
-              placeholder="Paste or type input here..."
+              placeholder="请在此粘贴或输入内容..."
               oninput="handleModalInput('reject')"
             ></textarea>
           </div>
@@ -770,7 +787,7 @@
             disabled
             onclick="confirmReject()"
           >
-            ✓ Confirm
+            ✓ 确认
           </button>
           <button
             class="modal-btn modal-btn-mcancel"
@@ -778,7 +795,7 @@
             disabled
             onclick="closeModal('modal-reject')"
           >
-            Cancel
+            取消
           </button>
         </div>
       </div>
@@ -790,7 +807,7 @@
         <div class="modal-header">
           <div class="modal-title-wrap">
             <span class="modal-title-icon modal-icon-checknum">🔢</span>
-            <span class="modal-title">Check Account Number</span>
+            <span class="modal-title">核对账户号码</span>
           </div>
           <button class="modal-close" onclick="closeModal('modal-checknum')">
             ✕
@@ -800,16 +817,15 @@
           <div class="modal-info-block" id="checknum-info"></div>
           <div class="modal-input-section">
             <label class="modal-input-label">
-              <span class="modal-input-required">*</span> Account Number to
-              Verify
+              <span class="modal-input-required">*</span> 待核验账户号码
               <span class="modal-input-hint" id="checknum-hint"
-                >— type to enable buttons</span
+                >— 输入后启用按钮</span
               >
             </label>
             <textarea
               class="modal-textarea"
               id="checknum-textarea"
-              placeholder="Paste or type input here..."
+              placeholder="请在此粘贴或输入内容..."
               oninput="handleModalInput('checknum')"
             ></textarea>
           </div>
@@ -821,7 +837,7 @@
             disabled
             onclick="doCheckNum()"
           >
-            ✓ Confirm
+            ✓ 确认
           </button>
           <button
             class="modal-btn modal-btn-mcancel"
@@ -829,7 +845,7 @@
             disabled
             onclick="closeModal('modal-checknum')"
           >
-            Cancel
+            取消
           </button>
         </div>
       </div>
@@ -841,7 +857,7 @@
         <div class="modal-header">
           <div class="modal-title-wrap">
             <span class="modal-title-icon modal-icon-checkname">👤</span>
-            <span class="modal-title">Check Account Name</span>
+            <span class="modal-title">核对账户姓名</span>
           </div>
           <button class="modal-close" onclick="closeModal('modal-checkname')">
             ✕
@@ -851,15 +867,15 @@
           <div class="modal-info-block" id="checkname-info"></div>
           <div class="modal-input-section">
             <label class="modal-input-label">
-              <span class="modal-input-required">*</span> Account Name to Verify
+              <span class="modal-input-required">*</span> 待核验账户姓名
               <span class="modal-input-hint" id="checkname-hint"
-                >— type to enable buttons</span
+                >— 输入后启用按钮</span
               >
             </label>
             <textarea
               class="modal-textarea"
               id="checkname-textarea"
-              placeholder="Paste or type input here..."
+              placeholder="请在此粘贴或输入内容..."
               oninput="handleModalInput('checkname')"
             ></textarea>
           </div>
@@ -871,7 +887,7 @@
             disabled
             onclick="doCheckName()"
           >
-            ✓ Confirm
+            ✓ 确认
           </button>
           <button
             class="modal-btn modal-btn-mcancel"
@@ -879,7 +895,7 @@
             disabled
             onclick="closeModal('modal-checkname')"
           >
-            Cancel
+            取消
           </button>
         </div>
       </div>
@@ -897,7 +913,7 @@
               >✓</span
             >
             <span class="modal-title" id="result-modal-title"
-              >Verification Result</span
+              >核验结果</span
             >
           </div>
           <button class="modal-close" onclick="closeModal('modal-result')">
@@ -910,7 +926,7 @@
             class="modal-btn modal-btn-primary"
             onclick="closeModal('modal-result')"
           >
-            Close
+            关闭
           </button>
         </div>
       </div>
@@ -926,7 +942,7 @@
               style="background: #fef2f2; color: #dc2626"
               >⚠</span
             >
-            <span class="modal-title">System Notice</span>
+            <span class="modal-title">系统通知</span>
           </div>
           <button class="modal-close" onclick="closeModal('modal-error')">
             ✕
@@ -935,7 +951,7 @@
         <div class="modal-body" style="text-align: center; padding: 20px 16px">
           <div class="error-icon">⊗</div>
           <div class="error-msg" id="error-msg-text">
-            Transaction is not in the correct state.
+            交易当前状态不允许此操作。
           </div>
         </div>
         <div class="modal-footer">
@@ -943,7 +959,7 @@
             class="modal-btn modal-btn-primary"
             onclick="closeModal('modal-error')"
           >
-            Confirm
+            确认
           </button>
         </div>
       </div>
@@ -955,27 +971,27 @@
         <div class="modal-header">
           <div class="modal-title-wrap">
             <span class="modal-title-icon" id="report-modal-icon" style="background:#eff6ff;color:#1d4ed8">📊</span>
-            <span class="modal-title" id="report-modal-title">Report</span>
+            <span class="modal-title" id="report-modal-title">报表</span>
           </div>
           <button class="modal-close" onclick="closeModal('modal-report')">✕</button>
         </div>
         <div class="modal-body" id="report-modal-body" style="max-height:65vh;overflow-y:auto;padding:16px 20px">
-          <div style="text-align:center;padding:30px;color:#9ca3af">Loading...</div>
+          <div style="text-align:center;padding:30px;color:#9ca3af">加载中...</div>
         </div>
         <div class="modal-footer" style="gap:8px">
           <button class="modal-btn" id="report-export-btn"
             style="background:#166534;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"
             onclick="exportReportExcel()">
-            ⬇ Export Excel
+            ⬇ 导出 Excel
           </button>
-          <button class="modal-btn modal-btn-primary" onclick="closeModal('modal-report')">Close</button>
+          <button class="modal-btn modal-btn-primary" onclick="closeModal('modal-report')">关闭</button>
         </div>
       </div>
     </div>
 
     <!-- NOTIFICATION -->
     <div class="sys-notice" id="sys-notice">
-      <span id="sys-notice-text">Action completed.</span>
+      <span id="sys-notice-text">操作已完成。</span>
     </div>
 
     <script src="script.js"></script>

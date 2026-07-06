@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PayAdmin — System Reset</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: 'Roboto', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: #0f172a;
             color: #f8fafc;
             display: flex;
@@ -51,14 +52,14 @@
 
 <div class="container">
     <img src="favicon.png" alt="Logo" style="width: 80px; height: 80px; margin-bottom: 20px; border-radius: 12px; filter: grayscale(1) contrast(1.2);">
-    <h1>RESET DATABASE</h1>
+    <h1>重置数据库</h1>
     <p>
-        Tombol ini akan menghapus <strong>SELURUH</strong> data berikut:<br>
-        - Semua Transaksi (History)<br>
-        - Semua Log Aktivitas<br>
-        - Seluruh Pesan Chat &amp; Foto
+        此按钮将删除以下<strong>全部</strong>数据：<br>
+        - 所有交易（历史）<br>
+        - 所有活动日志<br>
+        - 所有聊天消息和图片
     </p>
-    <button id="main-btn" class="reset-btn" onclick="masterReset()">HAPUS SEMUA DATA</button>
+    <button id="main-btn" class="reset-btn" onclick="masterReset()">删除所有数据</button>
     <div id="status-box" class="status"></div>
 </div>
 
@@ -76,55 +77,55 @@
     }
 
     async function masterReset() {
-        const confirmed = confirm("⚠️ APAKAH ANDA BENAR-BENAR YAKIN? Data yang dihapus tidak bisa dikembalikan!");
+        const confirmed = confirm("⚠️ 你确定吗？删除后的数据无法恢复！");
         if (!confirmed) return;
 
-        const doubleConfirmed = prompt("Tulis kata 'HAPUS' (huruf besar) untuk melanjutkan:");
-        if (doubleConfirmed !== "HAPUS") {
-            alert("Sandi salah. Reset dibatalkan.");
+        const doubleConfirmed = prompt("请输入“删除”以继续：");
+        if (doubleConfirmed !== "删除") {
+            alert("口令错误，已取消重置。");
             return;
         }
 
         const btn = document.getElementById("main-btn");
         btn.disabled = true;
-        btn.innerText = "Processing...";
+        btn.innerText = "处理中...";
 
         try {
-            log("Deleting Transaction Logs...");
+            log("正在删除交易日志...");
             const { error: err1 } = await sb.from("transaction_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
             if (err1) throw err1;
 
-            log("Deleting Transactions...");
+            log("正在删除交易记录...");
             const { error: err2 } = await sb.from("transactions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
             if (err2) throw err2;
 
-            log("Deleting Chat Messages...");
+            log("正在删除聊天消息...");
             const { error: err3 } = await sb.from("messages").delete().neq("id", "00000000-0000-0000-0000-000000000000");
             if (err3) throw err3;
 
-            log("Cleaning up Storage Bucket 'chat_images'...");
+            log("正在清理存储桶 chat_images...");
             const { data: files, error: listError } = await sb.storage.from('chat_images').list();
             if (listError) {
-                log("Warning: Storage cleanup skipped", "#eab308");
+                log("警告：已跳过存储清理", "#eab308");
             } else if (files && files.length > 0) {
                 const paths = files.map(f => f.name);
                 const { error: delError } = await sb.storage.from('chat_images').remove(paths);
-                if (delError) log("Warning: Storage delete failed: " + delError.message, "#f43f5e");
-                else log(`Storage: ${files.length} images deleted.`, "#10b981");
+                if (delError) log("警告：存储删除失败：" + delError.message, "#f43f5e");
+                else log(`存储：已删除 ${files.length} 张图片。`, "#10b981");
             } else {
-                log("Storage: No images found.", "#94a3b8");
+                log("存储：未找到图片。", "#94a3b8");
             }
 
-            log("✅ SYSTEM RESET COMPLETE!", "#10b981");
-            alert("Semua data telah dihapus bersih!");
+            log("✅ 系统重置完成！", "#10b981");
+            alert("所有数据已彻底删除！");
 
         } catch (err) {
             console.error(err);
-            log("❌ ERROR: " + err.message, "#f43f5e");
-            alert("Terjadi kesalahan saat reset: " + err.message);
+            log("❌ 错误：" + err.message, "#f43f5e");
+            alert("重置时发生错误：" + err.message);
         } finally {
             btn.disabled = false;
-            btn.innerText = "HAPUS SEMUA DATA";
+            btn.innerText = "删除所有数据";
         }
     }
 </script>

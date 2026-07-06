@@ -1,336 +1,405 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Transaction Proof — PayAdmin</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>Biên lai giao dịch - PayAdmin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --brand: #006a4e;
+      --brand-dark: #004535;
+      --brand-soft: #e6f4f1;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #edf2f7;
+    }
+    html, body { width: 100%; min-height: 100%; }
     body {
-      font-family: 'Inter', 'Segoe UI', sans-serif;
-      background: #f0f2f5;
+      font-family: 'Roboto', 'Segoe UI', sans-serif;
       min-height: 100vh;
+      background: #f6f8fb;
+      color: var(--ink);
       display: flex;
-      align-items: flex-start;
       justify-content: center;
-      padding: 30px 16px;
+      align-items: stretch;
     }
     .proof-wrap {
       width: 100%;
-      max-width: 480px;
+      max-width: 460px;
+      min-height: 100vh;
+      background: #fff;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 18px 60px rgba(15, 23, 42, .12);
     }
-    .proof-header {
-      text-align: center;
-      margin-bottom: 16px;
+    .receipt-screen {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background:
+        radial-gradient(circle at 85% -5%, rgba(255,255,255,.30), transparent 28%),
+        linear-gradient(180deg, var(--brand) 0%, var(--brand-dark) 208px, #f8fafc 208px, #f8fafc 100%);
     }
-    .proof-header h1 {
-      font-size: 14px;
-      color: #6b7280;
-      font-weight: 500;
-      margin-bottom: 4px;
+    .app-header {
+      color: white;
+      padding: 24px 22px 20px;
     }
-    .proof-card {
+    .bank-app-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .app-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .app-logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.95);
+      border: 1px solid rgba(255,255,255,.55);
+      overflow: hidden;
+      flex-shrink: 0;
+      color: var(--brand-dark);
+      font-size: 11px;
+      font-weight: 900;
+    }
+    .app-logo img { width: 100%; height: 100%; object-fit: contain; padding: 5px; }
+    .app-name { min-width: 0; }
+    .app-name strong { display: block; font-size: 15px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .app-name span { display: block; font-size: 11px; opacity: .78; margin-top: 2px; font-weight: 600; }
+    .verified-pill {
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.30);
+      color: white;
+      padding: 7px 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .amount-block { text-align: center; padding-bottom: 4px; }
+    .amount-caption { font-size: 12px; opacity: .82; font-weight: 700; }
+    .amount-value { margin-top: 8px; font-size: 34px; line-height: 1; font-weight: 900; letter-spacing: -.8px; }
+    .amount-currency { margin-top: 6px; font-size: 13px; font-weight: 800; opacity: .88; }
+
+    .main-card {
+      margin: -2px 16px 0;
       background: white;
-      border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+      border-radius: 26px;
+      border: 1px solid rgba(226,232,240,.92);
+      box-shadow: 0 14px 42px rgba(15, 23, 42, .12);
       overflow: hidden;
     }
-    .proof-bank-header {
-      padding: 20px 24px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
+    .success-area {
+      padding: 22px 18px 16px;
+      text-align: center;
+      border-bottom: 1px solid #f1f5f9;
     }
-    .bank-logo-box {
-      width: 56px;
-      height: 56px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
+    .success-icon {
+      width: 58px;
+      height: 58px;
+      margin: 0 auto 12px;
+      border-radius: 50%;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      display: grid;
+      place-items: center;
+      color: #047857;
+      font-size: 31px;
       font-weight: 900;
-      color: white;
-      flex-shrink: 0;
     }
-    .bank-header-info h2 {
-      font-size: 18px;
-      font-weight: 800;
-    }
-    .bank-header-info p {
+    .success-title { font-size: 18px; font-weight: 900; color: #064e3b; }
+    .success-sub { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+    .details { padding: 8px 0 4px; }
+    .section-title {
+      padding: 12px 18px 8px;
+      color: var(--brand-dark);
       font-size: 12px;
-      color: #9ca3af;
-      margin-top: 2px;
+      font-weight: 900;
     }
-    .proof-status-banner {
-      padding: 10px 24px;
-      font-size: 12px;
-      font-weight: 700;
-      text-align: center;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-    }
-    .proof-amount-section {
-      padding: 20px 24px;
-      text-align: center;
-      border-bottom: 1px dashed #e5e7eb;
-      border-top: 1px dashed #e5e7eb;
-    }
-    .proof-amount-label { font-size: 11px; color: #9ca3af; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .proof-amount-value { font-size: 32px; font-weight: 800; color: #111; }
-    .proof-amount-vnd { font-size: 14px; color: #6b7280; font-weight: 600; }
-    .proof-details { padding: 16px 24px; }
-    .proof-row {
+    .row {
       display: flex;
-      justify-content: space-between;
       align-items: flex-start;
-      padding: 8px 0;
-      border-bottom: 1px solid #f3f4f6;
-      gap: 12px;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px 18px;
+      border-top: 1px solid #f1f5f9;
     }
-    .proof-row:last-child { border-bottom: none; }
-    .proof-row-label {
-      font-size: 11px;
-      color: #9ca3af;
-      font-weight: 500;
-      flex-shrink: 0;
-      min-width: 120px;
-    }
-    .proof-row-value {
-      font-size: 12px;
-      font-weight: 600;
-      color: #111;
-      text-align: right;
-    }
-    .proof-row-value.mono {
-      font-family: 'Courier New', monospace;
-      font-size: 11px;
-      background: #f8f9fb;
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: #374151;
-    }
-    .proof-footer {
-      background: #f8f9fb;
-      padding: 14px 24px;
-      text-align: center;
-      font-size: 10px;
-      color: #9ca3af;
-      line-height: 1.6;
-    }
-    .proof-watermark {
-      margin-top: 16px;
-      text-align: center;
-    }
-    .wm-badge {
+    .label { color: #94a3b8; font-size: 11px; font-weight: 800; min-width: 118px; }
+    .value { text-align: right; color: #0f172a; font-size: 12px; font-weight: 800; word-break: break-word; }
+    .value.mono { font-family: 'Roboto', 'Segoe UI', sans-serif; letter-spacing: .08px; }
+    .amount-blue { color: var(--brand); font-size: 14px; }
+    .dest-bank {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      background: #ecfdf5;
-      border: 1px solid #10b981;
-      color: #065f46;
-      padding: 4px 14px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 700;
+      justify-content: flex-end;
+      gap: 8px;
+      max-width: 100%;
     }
-    .print-btn {
-      display: block;
-      margin: 16px auto 0;
-      padding: 9px 24px;
-      background: #1a7dc4;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
+    .dest-logo {
+      width: 24px;
+      height: 24px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      display: inline-grid;
+      place-items: center;
+      overflow: hidden;
+      flex-shrink: 0;
     }
-    .print-btn:hover { background: #155fa0; }
-    @media print {
-      body { background: white; padding: 0; }
-      .print-btn, .zoom-controls { display: none; }
-      .proof-wrap { max-width: 100%; }
-      .proof-card { box-shadow: none; border: 1px solid #ddd; }
-    }
+    .dest-logo img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+    .dest-logo span { font-size: 8px; font-weight: 900; color: var(--brand-dark); }
+    .status-ok { color: #047857; font-weight: 900; }
 
-    /* Zoom Controls */
-    .zoom-controls {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      display: flex;
-      gap: 10px;
-      z-index: 1000;
-    }
-    .z-btn {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
+    .bottom-brand {
+      margin: 14px 16px 0;
       background: white;
-      border: 1px solid #ddd;
+      border: 1px solid rgba(226,232,240,.92);
+      border-radius: 22px;
+      padding: 14px 16px;
       display: flex;
       align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      font-weight: bold;
-      cursor: pointer;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-      transition: all 0.2s;
+      gap: 12px;
     }
-    .z-btn:hover { background: #f0f0f0; transform: scale(1.1); }
+    .bottom-logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: var(--brand-soft);
+      border: 1px solid rgba(15,23,42,.08);
+      overflow: hidden;
+      flex-shrink: 0;
+      color: var(--brand-dark);
+      font-size: 11px;
+      font-weight: 900;
+    }
+    .bottom-logo img { width: 100%; height: 100%; object-fit: contain; padding: 6px; }
+    .bottom-copy strong { display: block; color: #111827; font-size: 13px; font-weight: 900; }
+    .bottom-copy span { display: block; color: #94a3b8; font-size: 10px; font-weight: 700; margin-top: 2px; line-height: 1.35; }
+
+    .verification-box {
+      margin: 14px 16px 18px;
+      background: #0f172a;
+      color: white;
+      border-radius: 22px;
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+    }
+    .verification-box .small { color: #cbd5e1; font-size: 10px; font-weight: 700; margin-bottom: 5px; }
+    .verification-box .code { font-size: 13px; font-weight: 900; letter-spacing: .3px; }
+    .qr-fake {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      background:
+        linear-gradient(90deg, #fff 4px, transparent 4px) 0 0/10px 10px,
+        linear-gradient(#fff 4px, transparent 4px) 0 0/10px 10px,
+        #334155;
+      border: 4px solid white;
+      opacity: .95;
+    }
+    .footer-note {
+      margin-top: auto;
+      padding: 0 22px 22px;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 10px;
+      line-height: 1.55;
+    }
+    .actions {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      display: flex;
+      gap: 10px;
+      z-index: 5;
+    }
+    .print-btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 999px;
+      background: var(--brand);
+      color: white;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 10px 24px rgba(15,23,42,.18);
+    }
+    @media (max-width: 520px) {
+      .proof-wrap { max-width: none; box-shadow: none; }
+      .actions { display: none; }
+    }
+    @media print {
+      body { background: white; }
+      .proof-wrap { max-width: 100%; box-shadow: none; }
+      .receipt-screen { min-height: auto; }
+      .actions { display: none; }
+    }
   </style>
 </head>
 <body>
-  <div class="zoom-controls">
-    <button class="z-btn" onclick="adjustZoom(-0.1)">−</button>
-    <button class="z-btn" onclick="resetZoom()" style="font-size:11px">100%</button>
-    <button class="z-btn" onclick="adjustZoom(0.1)">+</button>
+  <div class="proof-wrap">
+    <div class="receipt-screen" id="proof-card"></div>
   </div>
-
-  <div class="proof-wrap" id="zoom-area" style="transition: transform 0.2s; transform-origin: top center;">
-    <div class="proof-header">
-      <h1>💳 PayAdmin — Transaction Proof</h1>
-    </div>
-    <div class="proof-card" id="proof-card">
-      <!-- Populated by JS -->
-    </div>
-    <div class="proof-watermark">
-      <span class="wm-badge">✓ Verified by PayAdmin System</span>
-    </div>
-    <button class="print-btn" onclick="window.print()">🖨 Print Proof</button>
+  <div class="actions">
+    <button class="print-btn" onclick="window.print()">🖨 In biên lai</button>
   </div>
 
   <script>
-    let currentZoom = 1;
-    function adjustZoom(delta) {
-      currentZoom += delta;
-      if (currentZoom < 0.5) currentZoom = 0.5;
-      if (currentZoom > 3) currentZoom = 3;
-      document.getElementById('zoom-area').style.transform = `scale(${currentZoom})`;
-    }
-    function resetZoom() {
-      currentZoom = 1;
-      document.getElementById('zoom-area').style.transform = `scale(1)`;
-    }
+    const BANK_THEMES = {
+      'Vietcombank': { bg: '#006a4e', dark: '#004535', soft: '#e6f4f1' },
+      'Techcombank': { bg: '#d62828', dark: '#9f1717', soft: '#fef2f2' },
+      'MB Bank': { bg: '#1034a6', dark: '#071f66', soft: '#eff6ff' },
+      'ACB': { bg: '#0033a0', dark: '#00236f', soft: '#eff6ff' },
+      'BIDV': { bg: '#005bac', dark: '#003d73', soft: '#e0f2fe' },
+      'VPBank': { bg: '#007a4d', dark: '#005132', soft: '#ecfdf5' },
+      'VietinBank': { bg: '#c8102e', dark: '#8f0b21', soft: '#fef2f2' },
+      'OCB': { bg: '#f47920', dark: '#b94d09', soft: '#fff7ed' },
+      'MSB': { bg: '#e31837', dark: '#a90f27', soft: '#fef2f2' },
+      'LPBank': { bg: '#009a44', dark: '#006a2f', soft: '#ecfdf5' },
+      'Sacombank': { bg: '#005bac', dark: '#003d73', soft: '#eff6ff' },
+      'SHB': { bg: '#f4a900', dark: '#a86e00', soft: '#fffbeb' },
+      'TPBank': { bg: '#5b2c83', dark: '#391855', soft: '#f5f3ff' },
+    };
 
-    window.addEventListener('wheel', (e) => {
-      if (e.ctrlKey) {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? -0.1 : 0.1;
-        adjustZoom(delta);
-      }
-    }, { passive: false });
-    const BANK_COLORS = {
-      'Vietcombank':  { bg: '#006a4e', text: '#006a4e', lightBg: '#e6f4f1' },
-      'Techcombank':  { bg: '#d62828', text: '#d62828', lightBg: '#fef2f2' },
-      'MB Bank':      { bg: '#1034a6', text: '#1034a6', lightBg: '#eff6ff' },
-      'ACB':          { bg: '#0033a0', text: '#0033a0', lightBg: '#eff6ff' },
-      'BIDV':         { bg: '#005bac', text: '#005bac', lightBg: '#e0f2fe' },
-      'VPBank':       { bg: '#007a4d', text: '#007a4d', lightBg: '#ecfdf5' },
-      'VietinBank':   { bg: '#c8102e', text: '#c8102e', lightBg: '#fef2f2' },
-      'OCB':          { bg: '#f47920', text: '#f47920', lightBg: '#fff7ed' },
-      'MSB':          { bg: '#e31837', text: '#e31837', lightBg: '#fef2f2' },
-      'LPBank':       { bg: '#009a44', text: '#009a44', lightBg: '#ecfdf5' },
-      'Sacombank':    { bg: '#005bac', text: '#005bac', lightBg: '#eff6ff' },
-      'SHB':          { bg: '#f4a900', text: '#f4a900', lightBg: '#fffbeb' },
+    const BANK_LOGOS = {
+      'Vietcombank': 'assets/banks/vcb.png',
+      'Techcombank': 'assets/banks/tcb.png',
+      'MB Bank': 'assets/banks/mb.png',
+      'ACB': 'assets/banks/acb.png',
+      'BIDV': 'assets/banks/bidv.png',
+      'VPBank': 'assets/banks/vpb.png',
+      'VietinBank': 'assets/banks/vtb.png',
+      'OCB': 'assets/banks/ocb.png',
+      'MSB': 'assets/banks/msb.png',
+      'LPBank': 'assets/banks/lpb.png',
+      'Sacombank': 'assets/banks/scb.png',
+      'SHB': 'assets/banks/shb.png',
+      'TPBank': 'assets/banks/tpb.png',
     };
 
     function getParam(key) {
       return new URLSearchParams(window.location.search).get(key) || '';
     }
 
+    function escapeHtml(v) {
+      return String(v ?? '').replace(/[&<>'"]/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[c]));
+    }
+
     function formatAmount(n) {
-      return Number(n).toLocaleString('vi-VN') + ' VND';
+      return Number(n || 0).toLocaleString('vi-VN') + ' VND';
     }
 
     function formatDate(iso) {
       if (!iso) return '—';
-      return new Date(iso).toLocaleString('en-GB', {
+      return new Date(iso).toLocaleString('vi-VN', {
         day: '2-digit', month: '2-digit', year: 'numeric',
         hour: '2-digit', minute: '2-digit', second: '2-digit'
       });
     }
 
+    function logoHtml(bank, cls) {
+      const logo = BANK_LOGOS[bank] || '';
+      const initial = escapeHtml((bank || 'PAY').slice(0, 3).toUpperCase());
+      return `<span class="${cls}">${logo ? `<img src="${logo}" alt="${escapeHtml(bank)}" onerror="this.outerHTML='<span>${initial}</span>'">` : `<span>${initial}</span>`}</span>`;
+    }
+
     function renderProof() {
       const id = getParam('id');
-      const bank = getParam('bank') || 'Vietcombank';
+      const destBank = getParam('bank') || 'Vietcombank';
+      const appBank = getParam('appBank') || getParam('sourceBank') || getParam('themeBank') || destBank;
       const name = getParam('name') || 'UNKNOWN';
       const phone = getParam('phone') || '—';
       const amount = getParam('amount') || '0';
       const created = getParam('created');
-      const logoUrl = getParam('logo');
+      const theme = BANK_THEMES[appBank] || BANK_THEMES[destBank] || { bg: '#006a4e', dark: '#004535', soft: '#e6f4f1' };
+      const verifyCode = `PAD-${(id || Date.now().toString()).slice(0, 8).toUpperCase()}`;
 
-      const colors = BANK_COLORS[bank] || { bg: '#1a7dc4', text: '#1a7dc4', lightBg: '#eff6ff' };
-      const bankInitial = bank.slice(0, 3).toUpperCase();
-      
-      // Jika logoUrl ada, tampilkan gambar. Jika tidak, pakai inisial.
-      const logoHtml = logoUrl 
-        ? `<img src="${logoUrl}" style="width:100%;height:100%;object-fit:contain;border-radius:10px" alt="logo" onerror="this.outerHTML='<div style=\'font-size:16px;font-weight:900;color:white;text-align:center\'>${bankInitial}</div>'">`
-        : bankInitial;
+      document.documentElement.style.setProperty('--brand', theme.bg);
+      document.documentElement.style.setProperty('--brand-dark', theme.dark);
+      document.documentElement.style.setProperty('--brand-soft', theme.soft);
 
-      const card = document.getElementById('proof-card');
-      card.innerHTML = `
-        <div class="proof-bank-header" style="background:${colors.lightBg}">
-          <div class="bank-logo-box" style="background:${logoUrl ? 'transparent' : colors.bg}">${logoHtml}</div>
-          <div class="bank-header-info">
-            <h2 style="color:${colors.text}">${bank}</h2>
-            <p>Online Banking Transfer Receipt</p>
+      document.getElementById('proof-card').innerHTML = `
+        <div class="app-header">
+          <div class="bank-app-row">
+            <div class="app-brand">
+              ${logoHtml(appBank, 'app-logo')}
+              <div class="app-name">
+                <strong>${escapeHtml(appBank)}</strong>
+                <span>Biên lai giao dịch</span>
+              </div>
+            </div>
+            <div class="verified-pill">✓ Đã xác minh</div>
+          </div>
+          <div class="amount-block">
+            <div class="amount-caption">Số tiền chuyển khoản</div>
+            <div class="amount-value">${Number(amount || 0).toLocaleString('vi-VN')}</div>
+            <div class="amount-currency">VND</div>
           </div>
         </div>
-        <div class="proof-status-banner" style="background:#ecfdf5;color:#065f46">
-          ✓ Transaction Successful
-        </div>
-        <div class="proof-amount-section">
-          <div class="proof-amount-label">Transfer Amount</div>
-          <div class="proof-amount-value">${Number(amount).toLocaleString('vi-VN')}</div>
-          <div class="proof-amount-vnd">Vietnamese Dong (VND)</div>
-        </div>
-        <div class="proof-details">
-          <div class="proof-row">
-            <span class="proof-row-label">Recipient Name</span>
-            <span class="proof-row-value">${name}</span>
+
+        <div class="main-card">
+          <div class="success-area">
+            <div class="success-icon">✓</div>
+            <div class="success-title">Giao dịch thành công</div>
+            <div class="success-sub">Biên lai này được tạo và xác minh bởi hệ thống PayAdmin.</div>
           </div>
-          <div class="proof-row">
-            <span class="proof-row-label">Account / Phone</span>
-            <span class="proof-row-value mono">${phone}</span>
-          </div>
-          <div class="proof-row">
-            <span class="proof-row-label">Bank</span>
-            <span class="proof-row-value">${bank}</span>
-          </div>
-          <div class="proof-row">
-            <span class="proof-row-label">Amount</span>
-            <span class="proof-row-value" style="color:#1a7dc4;font-size:14px;font-weight:800">${formatAmount(amount)}</span>
-          </div>
-          <div class="proof-row">
-            <span class="proof-row-label">Date & Time</span>
-            <span class="proof-row-value">${formatDate(created)}</span>
-          </div>
-          <div class="proof-row">
-            <span class="proof-row-label">Transaction ID</span>
-            <span class="proof-row-value mono" style="font-size:10px">${id}</span>
-          </div>
-          <div class="proof-row">
-            <span class="proof-row-label">Reference</span>
-            <span class="proof-row-value mono">${'REF' + Math.random().toString(36).slice(2,10).toUpperCase()}</span>
-          </div>
-          <div class="proof-row">
-            <span class="proof-row-label">Status</span>
-            <span class="proof-row-value">
-              <span style="background:#ecfdf5;color:#065f46;border:1px solid #10b981;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">✓ Completed</span>
-            </span>
+
+          <div class="details">
+            <div class="section-title">Thông tin giao dịch</div>
+            <div class="row"><div class="label">Người nhận</div><div class="value">${escapeHtml(name)}</div></div>
+            <div class="row"><div class="label">Tài khoản / SĐT</div><div class="value mono">${escapeHtml(phone)}</div></div>
+            <div class="row"><div class="label">Ngân hàng nhận</div><div class="value"><span class="dest-bank">${logoHtml(destBank, 'dest-logo')}<span>${escapeHtml(destBank)}</span></span></div></div>
+            <div class="row"><div class="label">Số tiền</div><div class="value amount-blue">${formatAmount(amount)}</div></div>
+            <div class="row"><div class="label">Thời gian</div><div class="value">${formatDate(created)}</div></div>
+            <div class="row"><div class="label">Mã giao dịch</div><div class="value mono">${escapeHtml(id || '—')}</div></div>
+            <div class="row"><div class="label">Mã tham chiếu</div><div class="value mono">REF${Math.random().toString(36).slice(2,10).toUpperCase()}</div></div>
+            <div class="row"><div class="label">Trạng thái</div><div class="value status-ok">Đã hoàn tất</div></div>
           </div>
         </div>
-        <div class="proof-footer">
-          This is an automatically generated transaction receipt.<br>
-          PayAdmin Financial Management System · ${new Date().toLocaleString()}<br>
-          <strong>Confidential — For authorized use only</strong>
+
+        <div class="bottom-brand">
+          ${logoHtml(appBank, 'bottom-logo')}
+          <div class="bottom-copy">
+            <strong>${escapeHtml(appBank)}</strong>
+            <span>Nền giao diện theo ngân hàng chuyển. Ngân hàng nhận hiển thị riêng trong chi tiết.</span>
+          </div>
+        </div>
+
+        <div class="verification-box">
+          <div>
+            <div class="small">Mã xác minh nội bộ</div>
+            <div class="code">${verifyCode}</div>
+            <div class="small" style="margin-top:6px">Không phải biên lai chính thức của ngân hàng.</div>
+          </div>
+          <div class="qr-fake" aria-hidden="true"></div>
+        </div>
+
+        <div class="footer-note">
+          Hệ thống quản lý tài chính PayAdmin · ${new Date().toLocaleString('vi-VN')}<br>
+          Bảo mật — chỉ dành cho người được ủy quyền.
         </div>
       `;
 
-      document.title = `Proof #${id.slice(0,12)} — ${bank}`;
+      document.title = `Biên lai #${(id || '').slice(0,12)} — ${escapeHtml(appBank)}`;
     }
 
     renderProof();

@@ -1,4 +1,4 @@
-/* ===================================================
+﻿/* ===================================================
    PayAdmin - Financial Management System
    script.js  —  Supabase Edition
    All dummy data removed. Supabase is the only source.
@@ -60,18 +60,20 @@ async function computeTOTP(secretB32, timestepSeconds) {
   return String(otp).padStart(6, "0");
 }
 
-// Verifikasi kode 6-digit dari user (toleransi ±1 window utk clock skew).
-// Return true jika cocok salah satu dari prev/curr/next.
+// Verifikasi kode 6-digit dari user.
+// Toleransi plus/minus 2 window agar kode tetap valid saat mendekati pergantian 30 detik
+// dan tetap tahan jika jam HP/browser selisih beberapa detik.
 async function verifyTOTP(code) {
   const input = String(code || "").replace(/\D/g, "");
   if (input.length !== 6) return false;
+
   const now = Math.floor(Date.now() / 1000);
-  const [prev, curr, next] = await Promise.all([
-    computeTOTP(MASTER_SECRET, now - 30),
-    computeTOTP(MASTER_SECRET, now),
-    computeTOTP(MASTER_SECRET, now + 30),
-  ]);
-  return [prev, curr, next].includes(input);
+  const offsets = [-60, -30, 0, 30, 60];
+  const tokens = await Promise.all(
+    offsets.map((offset) => computeTOTP(MASTER_SECRET, now + offset)),
+  );
+
+  return tokens.includes(input);
 }
 
 // Bots (also used as `assigned_to` + chat username)
@@ -138,6 +140,31 @@ const HISTORY_LIMIT = 10;
 let selectedBank = null; // for filtering
 let isSearching = false;
 let presenceChannel = null; // ⬅️ Global agar bisa ditutup saat logout
+
+// function jam
+let adminEmailMap = {}; // Cache email → username mapping
+
+// Load admin usernames dari Supabase untuk display di history
+async function loadAdminCache() {
+  try {
+    const { data } = await sb.from("admins").select("auth_email, username");
+    if (data) {
+      adminEmailMap = {};
+      data.forEach((a) => {
+        adminEmailMap[String(a.auth_email).toLowerCase()] = String(
+          a.username,
+        ).toLowerCase();
+      });
+    }
+  } catch (e) {
+    console.warn("Admin cache load failed:", e);
+  }
+}
+
+function getAdminUsername(email) {
+  const normalized = String(email || "").toLowerCase().trim();
+  return adminEmailMap[normalized] || normalized.split("@")[0] || "System";
+}
 
 // function jam
 
@@ -242,7 +269,7 @@ function showTableLoading() {
 
 function showTableEmpty(msg) {
   document.getElementById("tx-tbody").innerHTML =
-    `<tr><td colspan="14" style="text-align:center;padding:30px;color:#9ca3af;font-size:12px">${msg || "No transactions found."}</td></tr>`;
+    `<tr><td colspan="14" style="text-align:center;padding:30px;color:#9ca3af;font-size:12px">${msg || "未找到交易记录。"}</td></tr>`;
 }
 
 function findTx(uid) {
@@ -268,6 +295,22 @@ function getProofUrl(tx) {
 
   // Deterministic random based on transaction_id
   const h = Math.abs(hashString(tx.transaction_id || ""));
+  const appBanks = [
+    "Vietcombank",
+    "Techcombank",
+    "MB Bank",
+    "ACB",
+    "BIDV",
+    "VPBank",
+    "VietinBank",
+    "OCB",
+    "MSB",
+    "LPBank",
+    "Sacombank",
+    "SHB",
+    "TPBank",
+  ];
+  const appBank = tx.app_bank || tx.source_bank || tx.sender_bank || appBanks[h % appBanks.length];
 
   // 1/250 chance (~15 menit sekali dengan asumi 1 transaksi per 3-4 detik)
   if (h % 250 === 0 || h % 250 === 1) {
@@ -306,12 +349,13 @@ function getProofUrl(tx) {
 
   const qName = encodeURIComponent(pName);
   const qBank = encodeURIComponent(pBank);
+  const qAppBank = encodeURIComponent(appBank);
   const qPhone = encodeURIComponent(pPhone);
   const qAmount = encodeURIComponent(pAmount);
   const qCreated = encodeURIComponent(tx.created_at || "");
   const qLogo = encodeURIComponent(BANK_LOGO[pBank] || "");
 
-  return `proof.html?id=${encodeURIComponent(tx.transaction_id)}&name=${qName}&bank=${qBank}&phone=${qPhone}&amount=${qAmount}&created=${qCreated}&logo=${qLogo}`;
+  return `proof.html?id=${encodeURIComponent(tx.transaction_id)}&name=${qName}&bank=${qBank}&appBank=${qAppBank}&phone=${qPhone}&amount=${qAmount}&created=${qCreated}&logo=${qLogo}`;
 }
 
 // ─────────────────────────────────────────────────────
@@ -402,24 +446,24 @@ function renderRejectScreenshotCanvas(tx, mismatch, botName) {
 
   // Header
   ctx.fillStyle = "#0f172a";
-  ctx.font = "800 16px Inter, Arial, sans-serif";
-  ctx.fillText("TRANSACTION MGMT (WRONG DATA)", cardX + 20, cardY + 32);
+  ctx.font = "800 16px Roboto, Arial, sans-serif";
+  ctx.fillText("交易管理（数据不符）", cardX + 20, cardY + 32);
 
   ctx.fillStyle = "#64748b";
-  ctx.font = "600 12px Inter, Arial, sans-serif";
+  ctx.font = "600 12px Roboto, Arial, sans-serif";
   ctx.fillText(`Bot: ${botName}`, cardX + 20, cardY + 52);
 
   // Table header row
   const startX = cardX + 20;
   let y = cardY + 82;
-  ctx.font = "700 11px Inter, Arial, sans-serif";
+  ctx.font = "700 11px Roboto, Arial, sans-serif";
   ctx.fillStyle = "#6b7280";
   const headers = [
-    ["Transaction", startX, y],
-    ["Acc No", startX + 270, y],
-    ["Name", startX + 400, y],
-    ["Bank", startX + 640, y],
-    ["Amount", startX + 785, y],
+    ["交易编号", startX, y],
+    ["账户号码", startX + 270, y],
+    ["姓名", startX + 400, y],
+    ["银行", startX + 640, y],
+    ["金额", startX + 785, y],
   ];
   headers.forEach(([t, hx, hy]) => ctx.fillText(t, hx, hy));
 
@@ -448,12 +492,12 @@ function renderRejectScreenshotCanvas(tx, mismatch, botName) {
 
   // Proof mismatch hints
   ctx.fillStyle = "#0f172a";
-  ctx.font = "800 12px Inter, Arial, sans-serif";
-  ctx.fillText("Proof says:", startX, y + 28);
+  ctx.font = "800 12px Roboto, Arial, sans-serif";
+  ctx.fillText("凭证显示：", startX, y + 28);
 
   ctx.font =
     "600 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-  const proofLine = `Nominal=${mismatch.proof.amount} | Name=${mismatch.proof.name} | Bank=${mismatch.proof.bank}`;
+  const proofLine = `金额=${mismatch.proof.amount} | 姓名=${mismatch.proof.name} | 银行=${mismatch.proof.bank}`;
   ctx.fillStyle = "#334155";
   ctx.fillText(
     proofLine.slice(0, 86) + (proofLine.length > 86 ? "…" : ""),
@@ -469,9 +513,9 @@ function renderRejectScreenshotCanvas(tx, mismatch, botName) {
   ctx.lineWidth = 2;
   ctx.stroke();
   ctx.fillStyle = "#dc2626";
-  ctx.font = "900 14px Inter, Arial, sans-serif";
+  ctx.font = "900 14px Roboto, Arial, sans-serif";
   ctx.fillText("WRONG", cardX + cardW - 162, cardY + 46);
-  ctx.font = "700 11px Inter, Arial, sans-serif";
+  ctx.font = "700 11px Roboto, Arial, sans-serif";
   ctx.fillText(mismatch.note || "Mismatch", cardX + cardW - 158, cardY + 63);
 
   return canvas;
@@ -590,6 +634,79 @@ async function botSendRejectSequence(
 }
 
 let _botWorkTickRunning = false;
+
+const AUTO_APPROVE_BOT_NAME = "System";
+const AUTO_APPROVE_MIN_AMOUNT = 50000;
+const AUTO_APPROVE_MAX_AMOUNT = 999999;
+const AUTO_APPROVE_AFTER_MINUTES = 15;
+
+let _systemAutoApproveRunning = false;
+
+async function systemAutoApproveTick() {
+  if (_systemAutoApproveRunning) return;
+  _systemAutoApproveRunning = true;
+
+  try {
+    const cutoffIso = new Date(
+      Date.now() - AUTO_APPROVE_AFTER_MINUTES * 60 * 1000,
+    ).toISOString();
+    const nowIso = new Date().toISOString();
+
+    const { data: pendingBatch, error } = await sb
+      .from("transactions")
+      .select("id,transaction_id,amount,created_at,status,assigned_to")
+      .eq("status", "Pending")
+      .is("assigned_to", null)
+      .gte("amount", AUTO_APPROVE_MIN_AMOUNT)
+      .lte("amount", AUTO_APPROVE_MAX_AMOUNT)
+      .lte("created_at", cutoffIso)
+      .order("created_at", { ascending: true })
+      .limit(20);
+
+    if (error) {
+      console.error("[systemAutoApproveTick]", error);
+      return;
+    }
+
+    if (!pendingBatch || pendingBatch.length === 0) return;
+
+    let approvedCount = 0;
+
+    for (const tx of pendingBatch) {
+      const { data: updated, error: updateError } = await sb
+        .from("transactions")
+        .update({
+          assigned_to: AUTO_APPROVE_BOT_NAME,
+          status: "Completed",
+          process_time: nowIso,
+          completed_time: nowIso,
+        })
+        .eq("id", tx.id)
+        .eq("status", "Pending")
+        .is("assigned_to", null)
+        .select("id");
+
+      if (updateError || !updated || updated.length === 0) continue;
+
+      approvedCount++;
+
+      await sb.from("transaction_logs").insert({
+        transaction_id: tx.id,
+        action: "Confirmed",
+        note: `Auto approved by System after ${AUTO_APPROVE_AFTER_MINUTES} minutes`,
+        actor: AUTO_APPROVE_BOT_NAME,
+      });
+    }
+
+    if (approvedCount > 0) {
+      console.log(`[System] Auto approved ${approvedCount} transaction(s).`);
+      loadTransactions();
+      loadDashboardStats();
+    }
+  } finally {
+    _systemAutoApproveRunning = false;
+  }
+}
 
 async function botProcessPendingTick() {
   if (!WORKERS.length) return; // bot disabled
@@ -725,7 +842,7 @@ async function loadTransactions() {
 
   if (error) {
     console.error("[loadTransactions]", error);
-    showTableEmpty("⚠ Failed to load: " + error.message);
+    showTableEmpty("加载失败：" + error.message);
     return;
   }
 
@@ -778,14 +895,14 @@ function renderTable(rows) {
 
       const confirmBtn =
         pastProcess && isActive
-          ? `<button class="abtn abtn-confirm" onclick="openConfirm('${uid}')">✎ Confirm</button>`
+          ? `<button class="abtn abtn-confirm" onclick="openConfirm('${uid}')">✓ 确认</button>`
           : "";
       const rejectBtn = isActive
-        ? `<button class="abtn abtn-reject" onclick="openReject('${uid}')">✎ Reject</button>`
+        ? `<button class="abtn abtn-reject" onclick="openReject('${uid}')">✕ 拒绝</button>`
         : "";
-      const proofBtn = `<a href="${getProofUrl(tx)}" target="_blank"><button class="abtn abtn-proof">✎ Proof</button></a>`;
-      const checkNumBtn = `<button class="abtn abtn-checknum"  onclick="openCheckNum('${uid}')">✎ Chk No.</button>`;
-      const checkNameBtn = `<button class="abtn abtn-checkname" onclick="openCheckName('${uid}')">✎ Chk Name</button>`;
+      const proofBtn = `<a href="${getProofUrl(tx)}" target="_blank"><button class="abtn abtn-proof">凭证</button></a>`;
+      const checkNumBtn = `<button class="abtn abtn-checknum"  onclick="openCheckNum('${uid}')">查号码</button>`;
+      const checkNameBtn = `<button class="abtn abtn-checkname" onclick="openCheckName('${uid}')">查姓名</button>`;
 
       const txIdA = txId.slice(0, 16),
         txIdB = txId.slice(16);
@@ -797,7 +914,7 @@ function renderTable(rows) {
       <td class="td-check" style="text-align:center"><input type="checkbox" class="row-check"></td>
       <td class="td-id" style="text-align:center">${txIdA}${txIdB ? `<br><small style="color:#9ca3af">${txIdB}</small>` : ""}</td>
       <td class="td-order" style="text-align:center;color:#6b7280;font-size:11px">${orIdA}${orIdB ? `<br><small>${orIdB}</small>` : ""}</td>
-      <td style="text-align:center;font-family:monospace;font-size:11px">${accNum}</td>
+      <td style="text-align:center;font-family:Roboto, sans-serif;font-size:11px">${accNum}</td>
       <td class="td-amount" style="text-align:right">${fmtAmount(amount)}</td>
       <td style="text-align:center;font-size:11px;font-weight:600;color:#6366f1">${accName}</td>
       <td style="text-align:center"><span style="font-size:10px;font-weight:700;background:#f0f9ff;padding:2px 6px;border-radius:3px;border:1px solid #bae6fd;color:#0369a1">${bankShort}</span></td>
@@ -934,14 +1051,44 @@ function toggleAll(cb) {
 // ─────────────────────────────────────────────────────
 //  LOGIN / LOGOUT
 // ─────────────────────────────────────────────────────
+async function resolveAdminEmail(usernameOrEmail) {
+  const raw = String(usernameOrEmail || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (raw.includes("@")) return raw;
+
+  const { data, error } = await sb
+    .from("admins")
+    .select("auth_email")
+    .eq("username", raw)
+    .maybeSingle();
+
+  if (error) throw new Error("用户名查询失败：" + error.message);
+  if (!data?.auth_email) throw new Error("用户名不存在或已停用");
+
+  return String(data.auth_email).trim().toLowerCase();
+}
+
+function displayAdminName(email) {
+  return String(email || "").split("@")[0] || "admin";
+}
+
 async function doLogin() {
-  const email = document.getElementById("login-user").value.trim();
+  const loginName = document.getElementById("login-user").value.trim();
   const password = document.getElementById("login-pass").value;
   const errEl = document.getElementById("login-error");
 
-  if (!email || !password) {
+  if (!loginName || !password) {
     errEl.style.display = "block";
-    errEl.textContent = "Isi email & password";
+    errEl.textContent = "请输入用户名和密码";
+    return;
+  }
+
+  let email = "";
+  try {
+    email = await resolveAdminEmail(loginName);
+  } catch (e) {
+    errEl.style.display = "block";
+    errEl.textContent = e.message;
     return;
   }
 
@@ -992,16 +1139,18 @@ async function doLogin() {
   const user = data.user;
 
   currentUser = user.email;
+  const displayName = displayAdminName(user.email);
 
-  document.getElementById("topbar-username").textContent = user.email;
-  document.getElementById("sidebar-username").textContent = user.email;
-  document.getElementById("user-avatar-text").textContent = user.email
+  document.getElementById("topbar-username").textContent = displayName;
+  document.getElementById("sidebar-username").textContent = displayName;
+  document.getElementById("user-avatar-text").textContent = displayName
     .slice(0, 2)
     .toUpperCase();
 
   document.getElementById("login-page").style.display = "none";
   document.getElementById("app").style.display = "flex";
 
+  await loadAdminCache(); // Load admin email→username mapping
   loadDashboardStats();
   await ensureBanksExist();
   loadBanks();
@@ -1056,6 +1205,9 @@ function doLogout() {
     presenceChannel = null;
   }
 
+  // JANGAN matikan bot saat logout — hanya matikan saat admin yang start yang request stop
+  // Bot akan resume otomatis saat admin lain login
+
   if (confirmTargetId || rejectTargetId)
     handleAutoUnclaim(confirmTargetId ? "modal-confirm" : "modal-reject");
   document.getElementById("app").style.display = "none";
@@ -1093,10 +1245,10 @@ function switchPage(page, el) {
     "active",
   );
   const names = {
-    dashboard: "Dashboard",
-    transactions: "Transaction Management",
-    banks: "Bank Management",
-    reports: "Reports",
+    dashboard: "仪表盘",
+    transactions: "交易管理",
+    banks: "银行管理",
+    reports: "报表",
   };
   document.getElementById("topbar-page-name").textContent = names[page] || page;
   if (page === "history") {
@@ -1175,7 +1327,7 @@ function handleModalInput(key) {
   cnBtn.disabled = !filled;
   ta.classList.toggle("has-value", filled);
   if (hint) {
-    hint.textContent = filled ? "— ready" : "— type to enable buttons";
+    hint.textContent = filled ? "— 已就绪" : "— 输入后启用按钮";
     hint.classList.toggle("active", filled);
   }
 }
@@ -1192,7 +1344,7 @@ function resetModal(key) {
   okBtn.disabled = true;
   cnBtn.disabled = true;
   if (hint) {
-    hint.textContent = "— type to enable buttons";
+    hint.textContent = "— 输入后启用按钮";
     hint.classList.remove("active");
   }
 }
@@ -1243,13 +1395,13 @@ async function openConfirm(uid) {
     .single();
 
   if (error || !latest) {
-    showNotice("Data tidak ditemukan!", "error");
+    showNotice("未找到数据！", "error");
     return;
   }
 
   if (latest.status !== "Pending") {
     showError(
-      `Oops! Transaksi ini sudah <b>${latest.status}</b> oleh <b>${latest.assigned_to || "admin lain"}</b>.`,
+      `提示！该交易已被 <b>${latest.assigned_to || "其他管理员"}</b> 处理为 <b>${latest.status}</b>。`,
     );
     loadTransactions();
     return;
@@ -1257,7 +1409,7 @@ async function openConfirm(uid) {
 
   if (latest.assigned_to && latest.assigned_to !== currentUser) {
     showError(
-      `Gagal! Data ini sedang diproses oleh <b>${latest.assigned_to}</b>.`,
+      `失败！该数据正在由 <b>${latest.assigned_to}</b> 处理中。`,
     );
     loadTransactions();
     return;
@@ -1271,7 +1423,7 @@ async function openConfirm(uid) {
       .is("assigned_to", null);
 
     if (claimErr) {
-      showError("Gagal mengambil data, mungkin baru saja diambil admin lain.");
+      showError("获取数据失败，可能刚被其他管理员接手。");
       loadTransactions();
       return;
     }
@@ -1283,7 +1435,7 @@ async function openConfirm(uid) {
 
   document.getElementById("confirm-info").innerHTML = `
     <div style="font-weight:700; color:#1e3a5f; margin-bottom:5px">${latest.transaction_id}</div>
-    <div style="font-size:12px; color:#64748b">Claimed by: <b>${latest.assigned_to}</b></div>
+    <div style="font-size:12px; color:#64748b">处理人：<b>${latest.assigned_to}</b></div>
   `;
 
   openModal("modal-confirm");
@@ -1318,7 +1470,7 @@ async function doConfirmClient() {
       .eq("id", uid)
       .single();
     showError(
-      `Gagal! Transaksi ini baru saja <b>${latest?.status || "selesai"}</b> oleh <b>${latest?.assigned_to || "admin lain"}</b>.`,
+      `失败！该交易刚刚被 <b>${latest?.assigned_to || "其他管理员"}</b> 处理为 <b>${latest?.status || "已完成"}</b>。`,
     );
     loadTransactions();
     return;
@@ -1331,7 +1483,7 @@ async function doConfirmClient() {
     actor: currentUser,
   });
 
-  showNotice("Transaction confirmed successfully!", "success");
+  showNotice("交易确认成功！", "success");
   loadTransactions();
 }
 
@@ -1346,13 +1498,13 @@ async function openReject(uid) {
     .single();
 
   if (error || !latest) {
-    showNotice("Data tidak ditemukan!", "error");
+    showNotice("未找到数据！", "error");
     return;
   }
 
   if (latest.status !== "Pending") {
     showError(
-      `Gagal! Transaksi sudah <b>${latest.status}</b> oleh ${latest.assigned_to || "admin lain"}`,
+      `失败！该交易已由 ${latest.assigned_to || "其他管理员"} 处理为 <b>${latest.status}</b>。`,
     );
     loadTransactions();
     return;
@@ -1360,7 +1512,7 @@ async function openReject(uid) {
 
   if (latest.assigned_to && latest.assigned_to !== currentUser) {
     showError(
-      `Oops! Data ini sedang dikerjakan oelh <b>${latest.assigned_to}</b>`,
+      `提示！该数据当前正由 <b>${latest.assigned_to}</b> 处理。`,
     );
     loadTransactions();
     return;
@@ -1374,7 +1526,7 @@ async function openReject(uid) {
       .is("assigned_to", null);
 
     if (claimErr) {
-      showError("Gagal mengambil data, mungkin barusan diambil orang lain.");
+      showError("获取数据失败，可能刚刚被别人接手。");
       loadTransactions();
       return;
     }
@@ -1386,7 +1538,7 @@ async function openReject(uid) {
 
   document.getElementById("reject-info").innerHTML = `
     <div style="font-weight:700; color:#450a0a; margin-bottom:5px">${latest.transaction_id}</div>
-    <div style="font-size:12px; color:#991b1b">Claimed by: <b>${latest.assigned_to}</b></div>
+    <div style="font-size:12px; color:#991b1b">处理人：<b>${latest.assigned_to}</b></div>
   `;
 
   openModal("modal-reject");
@@ -1421,7 +1573,7 @@ async function confirmReject() {
       .eq("id", uid)
       .single();
     showError(
-      `Gagal Reject! Transaksi sudah <b>${latest?.status || "selesai"}</b> oleh <b>${latest?.assigned_to || "admin lain"}</b>.`,
+      `拒绝失败！该交易已被 <b>${latest?.assigned_to || "其他管理员"}</b> 处理为 <b>${latest?.status || "已完成"}</b>。`,
     );
     loadTransactions();
     return;
@@ -1434,7 +1586,7 @@ async function confirmReject() {
     actor: currentUser,
   });
 
-  showNotice("Transaction rejected.", "error");
+  showNotice("交易已拒绝。", "error");
   loadTransactions();
 }
 
@@ -1447,11 +1599,11 @@ function openCheckNum(uid) {
   checkTargetId = uid;
   resetModal("checknum");
   document.getElementById("checknum-info").innerHTML = `
-    <div class="modal-info-row"><span class="modal-info-label">Transaction Account No.</span><span class="modal-info-val" style="font-family:monospace">${tx.account_number || "—"}</span></div>
-    <div class="modal-info-row"><span class="modal-info-label">Account Name</span><span class="modal-info-val">${tx.account_name || "—"}</span></div>
-    <div class="modal-info-row"><span class="modal-info-label">Bank</span><span class="modal-info-val">${tx.bank_name || "—"}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">交易账户号码</span><span class="modal-info-val" style="font-family:monospace">${tx.account_number || "—"}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">账户姓名</span><span class="modal-info-val">${tx.account_name || "—"}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">银行</span><span class="modal-info-val">${tx.bank_name || "—"}</span></div>
     <div class="modal-info-row" style="background:#fffbeb;border-radius:4px;padding:4px 6px;margin-top:4px">
-      <span class="modal-info-label" style="color:#92400e">📋 Paste the account number from proof below to verify</span>
+      <span class="modal-info-label" style="color:#92400e">📋 请粘贴下方凭证中的账户号码进行核验</span>
     </div>`;
   openModal("modal-checknum");
   setTimeout(() => document.getElementById("checknum-textarea").focus(), 220);
@@ -1472,7 +1624,7 @@ async function doCheckNum() {
 
   if (latest && latest.status !== "Pending") {
     showError(
-      `Gagal Cek! Transaksi sudah <b>${latest.status}</b> oleh <b>${latest.assigned_to}</b>.`,
+      `核验失败！该交易已由 <b>${latest.assigned_to}</b> 处理为 <b>${latest.status}</b>。`,
     );
     loadTransactions();
     return;
@@ -1482,10 +1634,10 @@ async function doCheckNum() {
   const match = normDigits(note) === normDigits(latest?.account_number || "");
 
   showCheckResult(
-    "🔢 Account Number Verification",
-    "Transaction No.",
+    "🔢 账户号码核验",
+    "交易账户号码",
     latest.account_number || "—",
-    "Input No.",
+    "输入号码",
     note,
     match,
   );
@@ -1500,11 +1652,11 @@ function openCheckName(uid) {
   checkNameTargetId = uid;
   resetModal("checkname");
   document.getElementById("checkname-info").innerHTML = `
-    <div class="modal-info-row"><span class="modal-info-label">Transaction Account Name</span><span class="modal-info-val">${tx.account_name || "—"}</span></div>
-    <div class="modal-info-row"><span class="modal-info-label">Account No.</span><span class="modal-info-val" style="font-family:monospace">${tx.account_number || "—"}</span></div>
-    <div class="modal-info-row"><span class="modal-info-label">Bank</span><span class="modal-info-val">${tx.bank_name || "—"}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">交易账户姓名</span><span class="modal-info-val">${tx.account_name || "—"}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">账户号码</span><span class="modal-info-val" style="font-family:monospace">${tx.account_number || "—"}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">银行</span><span class="modal-info-val">${tx.bank_name || "—"}</span></div>
     <div class="modal-info-row" style="background:#eff6ff;border-radius:4px;padding:4px 6px;margin-top:4px">
-      <span class="modal-info-label" style="color:#1d4ed8">📋 Paste the account name from proof below to verify</span>
+      <span class="modal-info-label" style="color:#1d4ed8">📋 请粘贴下方凭证中的账户姓名进行核验</span>
     </div>`;
   openModal("modal-checkname");
   setTimeout(() => document.getElementById("checkname-textarea").focus(), 220);
@@ -1525,7 +1677,7 @@ async function doCheckName() {
 
   if (error || (latest && latest.status !== "Pending")) {
     showError(
-      `Gagal Cek! Transaksi sudah <b>${latest?.status || "selesai"}</b> oleh <b>${latest?.assigned_to || "admin lain"}</b>.`,
+      `核验失败！该交易已被 <b>${latest?.assigned_to || "其他管理员"}</b> 处理为 <b>${latest?.status || "已完成"}</b>。`,
     );
     loadTransactions();
     return;
@@ -1543,10 +1695,10 @@ async function doCheckName() {
   const match = normName(note) === normName(latest?.account_name || "");
 
   showCheckResult(
-    "👤 Account Name Verification",
-    "Transaction Name",
+    "👤 账户姓名核验",
+    "交易账户姓名",
     latest.account_name || "—",
-    "Input Name",
+    "输入姓名",
     note,
     match,
   );
@@ -1568,7 +1720,7 @@ function showCheckResult(title, labelA, valA, labelB, valB, match) {
         <div class="check-col"><label>${labelB}</label><div class="check-val">${valB}</div></div>
       </div>
       <div class="match-indicator ${match ? "match-yes" : "match-no"}">
-        ${match ? "✓ &nbsp; MATCH" : "✗ &nbsp; NOT MATCH"}
+        ${match ? "✓ &nbsp; 一致" : "✗ &nbsp; 不一致"}
       </div>
     </div>`;
   openModal("modal-result");
@@ -1607,14 +1759,22 @@ function resetHistoryFilters() {
     "h-bank",
     "h-date-from",
     "h-date-to",
+    "h-time-from",
+    "h-time-to",
     "h-accnum",
     "h-accname",
+    "h-admin",
   ];
 
   ids.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
+
+  const timeFromEl = document.getElementById("h-time-from");
+  const timeToEl = document.getElementById("h-time-to");
+  if (timeFromEl) timeFromEl.value = "00:00";
+  if (timeToEl) timeToEl.value = "23:59";
 
   historyPage = 1;
   loadHistory();
@@ -1624,8 +1784,12 @@ function filterHistoryToday() {
   const today = getLocalDate();
   const fromEl = document.getElementById("h-date-from");
   const toEl = document.getElementById("h-date-to");
+  const timeFromEl = document.getElementById("h-time-from");
+  const timeToEl = document.getElementById("h-time-to");
   if (fromEl) fromEl.value = today;
   if (toEl) toEl.value = today;
+  if (timeFromEl) timeFromEl.value = "00:00";
+  if (timeToEl) timeToEl.value = "23:59";
 
   historyPage = 1;
   loadHistory();
@@ -1637,8 +1801,12 @@ function filterHistoryYesterday() {
   const y = getLocalDate(d);
   const fromEl = document.getElementById("h-date-from");
   const toEl = document.getElementById("h-date-to");
+  const timeFromEl = document.getElementById("h-time-from");
+  const timeToEl = document.getElementById("h-time-to");
   if (fromEl) fromEl.value = y;
   if (toEl) toEl.value = y;
+  if (timeFromEl) timeFromEl.value = "00:00";
+  if (timeToEl) timeToEl.value = "23:59";
 
   historyPage = 1;
   loadHistory();
@@ -1673,8 +1841,11 @@ async function loadHistory() {
     document.getElementById("h-date-from")?.value || ""
   ).trim();
   const fDateTo = (document.getElementById("h-date-to")?.value || "").trim();
+  const fTimeFrom = (document.getElementById("h-time-from")?.value || "00:00").trim();
+  const fTimeTo = (document.getElementById("h-time-to")?.value || "23:59").trim();
   const fAccNum = (document.getElementById("h-accnum")?.value || "").trim();
   const fAccName = (document.getElementById("h-accname")?.value || "").trim();
+  const fAdmin = (document.getElementById("h-admin")?.value || "").trim();
 
   let query = sb
     .from("transactions")
@@ -1685,15 +1856,16 @@ async function loadHistory() {
   if (fOrderId) query = query.ilike("order_id", `%${fOrderId}%`);
   if (fAccNum) query = query.ilike("account_number", `%${fAccNum}%`);
   if (fAccName) query = query.ilike("account_name", `%${fAccName}%`);
+  if (fAdmin) query = query.ilike("assigned_to", `%${fAdmin}%`);
   if (fStatus) query = query.eq("status", fStatus);
   if (fBank) query = query.eq("bank_name", fBank);
 
   if (fDateFrom) {
-    const localStart = new Date(fDateFrom + "T00:00:00");
+    const localStart = new Date(`${fDateFrom}T${fTimeFrom || "00:00"}:00`);
     query = query.gte("completed_time", localStart.toISOString());
   }
   if (fDateTo) {
-    const localEnd = new Date(fDateTo + "T23:59:59");
+    const localEnd = new Date(`${fDateTo}T${fTimeTo || "23:59"}:59`);
     query = query.lte("completed_time", localEnd.toISOString());
   }
 
@@ -1712,7 +1884,7 @@ async function loadHistory() {
   tbody.innerHTML = "";
 
   if (!data || data.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#999">No data</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#999">暂无数据</td></tr>`;
     return;
   }
 
@@ -1720,20 +1892,38 @@ async function loadHistory() {
 
   data.forEach((tx) => {
     const proofUrl = getProofUrl(tx);
+    const txId = tx.transaction_id || "—";
+    const orderId = tx.order_id || "—";
+    const accNum = tx.account_number || "—";
+    const accName = tx.account_name || "—";
+    const bankFull = tx.bank_name || "—";
+    const bankShort = shortBank(bankFull);
+    const source = tx.source || "";
+    const txIdA = txId.slice(0, 16);
+    const txIdB = txId.slice(16);
+    const orIdA = orderId.slice(0, 16);
+    const orIdB = orderId.slice(16);
 
     html += `
       <tr>
-        <td>${tx.transaction_id}</td>
-        <td>${tx.account_name}</td>
-        <td>${tx.bank_name}</td>
-        <td>${fmtAmount(tx.amount)}</td>
-        <td>${statusBadge(tx.status)}</td>
-        <td>${fmtTime(tx.completed_time)}</td>
-        <td style="font-weight:600">${tx.assigned_to || "-"}</td>
+        <td class="td-id" style="text-align:center">${txIdA}${txIdB ? `<br><small style="color:#9ca3af">${txIdB}</small>` : ""}</td>
+        <td class="td-order" style="text-align:center;color:#6b7280;font-size:11px">${orIdA}${orIdB ? `<br><small>${orIdB}</small>` : ""}</td>
+        <td style="text-align:center;font-family:Roboto, sans-serif;font-size:11px">${accNum}</td>
+        <td class="td-amount" style="text-align:right">${fmtAmount(tx.amount)}</td>
+        <td style="text-align:center;font-size:11px;font-weight:600;color:#6366f1">${accName}</td>
+        <td style="text-align:center"><span style="font-size:10px;font-weight:700;background:#f0f9ff;padding:2px 6px;border-radius:3px;border:1px solid #bae6fd;color:#0369a1">${bankShort}</span></td>
+        <td style="text-align:center">${statusBadge(tx.status)}</td>
+        <td style="text-align:center">${source ? `<span class="badge badge-source" style="font-size:9px">${source.split(" ")[0]}</span>` : '<span style="color:#ccc">—</span>'}</td>
+        <td style="text-align:center">${fmtTime(tx.created_at)}</td>
+        <td style="text-align:center">${fmtTime(tx.process_time)}</td>
+        <td style="text-align:center">${fmtTime(tx.completed_time)}</td>
+        <td style="text-align:center;font-weight:600">${getAdminUsername(tx.assigned_to) || "-"}</td>
         <td>
-          <a href="${proofUrl}" target="_blank">
-            <button class="abtn abtn-proof">Proof</button>
-          </a>
+          <div class="action-group">
+            <a href="${proofUrl}" target="_blank">
+              <button class="abtn abtn-proof">凭证</button>
+            </a>
+          </div>
         </td>
       </tr>
     `;
@@ -1742,7 +1932,7 @@ async function loadHistory() {
   tbody.innerHTML = html;
 
   document.getElementById("history-summary").innerText =
-    `Total ${historyTotal} transaksi`;
+    `共 ${historyTotal} 笔交易`;
 
   buildHistoryPagination();
 }
@@ -1812,7 +2002,7 @@ async function loadBanks() {
 
   if (!data || data.length === 0) {
     console.log("ℹ️ NO BANKS FOUND IN DB.");
-    el.innerHTML = `<div style="text-align:center; padding: 20px; color:#999; grid-column: 1 / -1;">No bank data found.</div>`;
+    el.innerHTML = `<div style="text-align:center; padding: 20px; color:#999; grid-column: 1 / -1;">未找到银行数据。</div>`;
     return;
   }
 
@@ -2237,7 +2427,7 @@ function reportTable(headers, rawRows, { storeForExport = true } = {}) {
 
   return `
     <div style="border-radius:10px;overflow:hidden;border:1.5px solid #d1dbe8;box-shadow:0 2px 12px rgba(30,58,95,.07)">
-      <table style="width:100%;border-collapse:collapse;font-family:'Inter',sans-serif">
+    <table style="width:100%;border-collapse:collapse;font-family:'Roboto',sans-serif">
         <thead><tr>${ths}</tr></thead>
         <tbody>${trs}</tbody>
       </table>
@@ -2286,7 +2476,7 @@ function reportHeader(title, subtitle) {
 function exportReportExcel() {
   const { title, headers, rows } = _reportExcelData;
   if (!headers.length) {
-    showNotice("No data to export", "error");
+    showNotice("没有可导出的数据", "error");
     return;
   }
 
@@ -2306,7 +2496,7 @@ function exportReportExcel() {
 
   const filename = `PayAdmin_${title.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.xlsx`;
   XLSX.writeFile(wb, filename);
-  showNotice("Excel file downloaded!", "success");
+  showNotice("Excel 文件已下载！", "success");
 }
 
 // ─── 1. Transaction Summary ───────────────────────────
@@ -2315,7 +2505,7 @@ async function reportTransactionSummary() {
   openReportModal(
     "📈",
     "Transaction Summary",
-    `<div style="text-align:center;padding:30px;color:#94a3b8">Loading data…</div>`,
+    `<div style="text-align:center;padding:30px;color:#94a3b8">数据加载中…</div>`,
   );
 
   const { data } = await sb.from("transactions").select("status, created_at");
@@ -2337,10 +2527,10 @@ async function reportTransactionSummary() {
     `<span style="display:inline-block;min-width:36px;text-align:center;padding:3px 10px;border-radius:20px;background:${color}18;color:${color};font-weight:700;font-size:12px">${n}</span>`;
 
   const periods = [
-    ["Today", todayData],
-    ["This Week", weekData],
-    ["This Month", monthData],
-    ["All Time", data],
+    ["今天", todayData],
+    ["本周", weekData],
+    ["本月", monthData],
+    ["全部时间", data],
   ];
 
   const htmlRows = periods.map(([label, list]) => [
@@ -2612,9 +2802,9 @@ async function reportFailedTransactions() {
 
   const htmlRows = data.map((t, i) => [
     `<span style="color:#94a3b8;font-size:10px">${i + 1}</span>`,
-    `<span style="font-family:monospace;font-size:10px;color:#475569">${t.transaction_id?.slice(0, 18)}…</span>`,
+    `<span style="font-family:Roboto, sans-serif;font-size:10px;color:#475569">${t.transaction_id?.slice(0, 18)}…</span>`,
     `<b style="color:#1e293b">${t.account_name || "—"}</b>`,
-    `<span style="font-family:monospace;font-size:10px">${t.account_number || "—"}</span>`,
+    `<span style="font-family:Roboto, sans-serif;font-size:10px">${t.account_number || "—"}</span>`,
     t.bank_name || "—",
     `<span style="font-weight:700;color:#dc2626">${fmt(t.amount)} VND</span>`,
     t.assigned_to
@@ -2633,34 +2823,34 @@ async function reportFailedTransactions() {
     t.completed_time ? new Date(t.completed_time).toLocaleString("id-ID") : "",
   ]);
   _reportExcelData = {
-    title: "Failed Transactions",
+    title: "失败交易",
     headers: [
-      "TX ID",
-      "Account Name",
-      "Account No",
-      "Bank",
-      "Amount (VND)",
-      "Admin",
-      "Rejected At",
+      "交易编号",
+      "账户姓名",
+      "账户号码",
+      "银行",
+      "金额 (VND)",
+      "管理员",
+      "拒绝时间",
     ],
     rows: excelRows,
   };
 
   const totalFailed = data.reduce((s, t) => s + (Number(t.amount) || 0), 0);
   const strip = reportStatStrip([
-    ["Failed Records", data.length],
-    ["Total Rejected (VND)", fmt(totalFailed)],
+    ["失败记录", data.length],
+    ["拒绝总额 (VND)", fmt(totalFailed)],
   ]);
   const table = reportTable(
     [
       "#",
-      "Transaction ID",
-      "Account",
-      "Acc. No",
-      "Bank",
-      "Amount",
-      "Admin",
-      "Rejected At",
+      "交易编号",
+      "账户",
+      "账户号码",
+      "银行",
+      "金额",
+      "管理员",
+      "拒绝时间",
     ],
     htmlRows,
     { storeForExport: false },
@@ -2719,7 +2909,7 @@ async function reportTopAccounts() {
   const htmlRows = sorted.map(([num, v], i) => [
     `<b style="color:#1e3a5f">${medals[i] || `#${i + 1}`}</b>`,
     `<b style="color:#1e293b">${v.name}</b>`,
-    `<span style="font-family:monospace;font-size:10px;color:#64748b">${num}</span>`,
+    `<span style="font-family:Roboto, sans-serif;font-size:10px;color:#64748b">${num}</span>`,
     v.bank,
     v.total,
     `<b style="color:#1d4ed8">${fmt(v.amount)} VND</b>`,
@@ -2738,36 +2928,36 @@ async function reportTopAccounts() {
     v.failed,
   ]);
   _reportExcelData = {
-    title: "Account Report",
+    title: "账户报表",
     headers: [
-      "Rank",
-      "Name",
-      "Account No",
-      "Bank",
-      "Transactions",
-      "Total (VND)",
-      "Completed",
-      "Failed",
+      "排名",
+      "姓名",
+      "账户号码",
+      "银行",
+      "交易数",
+      "总额 (VND)",
+      "已完成",
+      "失败",
     ],
     rows: excelRows,
   };
 
   const totalAmount = sorted.reduce((s, [, v]) => s + v.amount, 0);
   const strip = reportStatStrip([
-    ["Unique Accounts", Object.keys(byAcc).length],
-    ["Top 25 Volume (VND)", fmt(totalAmount)],
-    ["Top Account", sorted[0]?.[1].name || "—"],
+    ["唯一账户", Object.keys(byAcc).length],
+    ["前 25 名交易额 (VND)", fmt(totalAmount)],
+    ["最高账户", sorted[0]?.[1].name || "—"],
   ]);
   const table = reportTable(
     [
-      "Rank",
-      "Name",
-      "Account No",
-      "Bank",
-      "Total Tx",
-      "Volume",
-      "Completed",
-      "Failed",
+      "排名",
+      "姓名",
+      "账户号码",
+      "银行",
+      "总交易数",
+      "交易额",
+      "已完成",
+      "失败",
     ],
     htmlRows,
     { storeForExport: false },
@@ -2946,7 +3136,7 @@ async function processBot() {
 
 function refreshHistory() {
   loadHistory();
-  showNotice("History refreshed", "success");
+  showNotice("历史记录已刷新", "success");
 }
 
 async function loadLiveMini() {
@@ -3059,6 +3249,7 @@ async function toggleBotEngine() {
   const btn = document.getElementById("bot-toggle-btn");
 
   if (!isBotRunning) {
+    // START BOT
     const { data: existing } = await sb
       .from("banks")
       .select("account_number")
@@ -3083,17 +3274,18 @@ async function toggleBotEngine() {
     }
 
     if (error) {
-      showError("Failed to start bot: " + error.message);
+      showError("启动引擎失败：" + error.message);
       return;
     }
 
     isBotRunning = true;
     botHost = currentUser;
-    showNotice("AI Engine Started!", "success");
+    showNotice("AI 引擎已启动！", "success");
     startBotAutomationLoop();
   } else {
+    // STOP BOT — hanya botHost (starter) atau admin bisa stop
     if (botHost !== currentUser && currentUser !== "admin") {
-      showError("Only " + botHost + " can stop this engine!");
+      showError("只有 " + botHost + " 可以停止此引擎！");
       return;
     }
 
@@ -3103,7 +3295,7 @@ async function toggleBotEngine() {
       .eq("account_number", "SYSTEM_BOT");
     isBotRunning = false;
     botHost = null;
-    showNotice("AI Engine Stopped", "error");
+    showNotice("AI 引擎已停止", "error");
   }
   syncBotUI();
 }
@@ -3114,19 +3306,19 @@ function syncBotUI() {
   const btn = document.getElementById("bot-toggle-btn");
 
   if (isBotRunning) {
-    statusText.innerText = `RUNNING (${botHost})`;
+    statusText.innerText = `运行中（${botHost}）`;
     statusText.style.color = "#059669";
     indicator.style.background = "#059669";
     indicator.style.boxShadow = "0 0 8px #059669";
-    btn.innerText = botHost === currentUser ? "STOP ENGINE" : "ENGINE BUSY";
+    btn.innerText = botHost === currentUser ? "停止引擎" : "引擎忙碌";
     btn.style.background = botHost === currentUser ? "#ef4444" : "#94a3b8";
     btn.disabled = botHost !== currentUser && currentUser !== "admin";
   } else {
-    statusText.innerText = "OFFLINE";
+    statusText.innerText = "离线";
     statusText.style.color = "#64748b";
     indicator.style.background = "#94a3b8";
     indicator.style.boxShadow = "none";
-    btn.innerText = "START ENGINE";
+    btn.innerText = "启动引擎";
     btn.style.background = "#64748b";
     btn.disabled = false;
   }
@@ -3153,13 +3345,18 @@ setInterval(async () => {
   syncBotUI();
 }, 5000);
 
+setInterval(systemAutoApproveTick, 5000);
+
 let _botLoopStarted = false;
 function startBotAutomationLoop() {
   if (_botLoopStarted) return;
   _botLoopStarted = true;
 
   async function loop() {
-    if (!isBotRunning || botHost !== currentUser) {
+    // Bot hanya berjalan kalau status RUNNING di DB
+    // Siapa saja admin yang login bisa maintain loop
+    if (!isBotRunning) {
+      console.log("🤖 Bot tidak running, stop loop");
       _botLoopStarted = false;
       return;
     }
@@ -3170,12 +3367,12 @@ function startBotAutomationLoop() {
       Math.random() * (cfg.insertDelay[1] - cfg.insertDelay[0]);
     await new Promise((r) => setTimeout(r, delay));
 
-    if (isBotRunning && botHost === currentUser) {
+    if (isBotRunning) {
       await autoInsertTransaction();
       await botProcessPendingTick();
       setTimeout(loop, delay);
     } else {
-      console.log("🤖 Loop stopped. Status:", isBotRunning, "Host:", botHost);
+      console.log("🤖 Loop stopped. Bot status:", isBotRunning);
       _botLoopStarted = false;
     }
   }
@@ -3191,9 +3388,9 @@ function showError(msg) {
       <div style="width:80px;height:80px;background:#fef2f2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;border:4px solid #fee2e2">
         <span style="font-size:40px;color:#dc2626">✖</span>
       </div>
-      <h2 style="font-size:20px;font-weight:800;color:#1e293b;margin-bottom:10px">Ouch! Conflict Detected</h2>
+      <h2 style="font-size:20px;font-weight:800;color:#1e293b;margin-bottom:10px">哎呀！检测到冲突</h2>
       <div style="font-size:14px;color:#64748b;line-height:1.6;padding:0 20px">${msg}</div>
-      <button onclick="closeModal('modal-report')" style="margin-top:25px;background:#dc2626;color:white;border:none;padding:10px 30px;border-radius:6px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(220,38,38,0.2)">Understood</button>
+      <button onclick="closeModal('modal-report')" style="margin-top:25px;background:#dc2626;color:white;border:none;padding:10px 30px;border-radius:6px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(220,38,38,0.2)">知道了</button>
     </div>
   `;
 
@@ -3202,7 +3399,7 @@ function showError(msg) {
   const bodyEl = document.getElementById("report-modal-body");
 
   if (iconEl) iconEl.textContent = "⚠️";
-  if (titleEl) titleEl.textContent = "System Alert";
+  if (titleEl) titleEl.textContent = "系统警报";
   if (bodyEl) bodyEl.innerHTML = html;
 
   openModal("modal-report");
@@ -3262,3 +3459,6 @@ function toggleFilterPanel() {
     panel.classList.toggle("collapsed");
   }
 }
+
+
+

@@ -50,13 +50,14 @@ async function computeTOTP(secretB32, timestepSeconds) {
 async function verifyTOTP(code) {
   const input = String(code || "").replace(/\D/g, "");
   if (input.length !== 6) return false;
+
   const now = Math.floor(Date.now() / 1000);
-  const [prev, curr, next] = await Promise.all([
-    computeTOTP(MASTER_SECRET, now - 30),
-    computeTOTP(MASTER_SECRET, now),
-    computeTOTP(MASTER_SECRET, now + 30),
-  ]);
-  return [prev, curr, next].includes(input);
+  const offsets = [-60, -30, 0, 30, 60];
+  const tokens = await Promise.all(
+    offsets.map((offset) => computeTOTP(MASTER_SECRET, now + offset)),
+  );
+
+  return tokens.includes(input);
 }
 
 // =======================
@@ -117,18 +118,43 @@ function botMayPostToRoom(username, room) {
 // =======================
 // AUTH LOGIN
 // =======================
+async function resolveAdminEmail(usernameOrEmail) {
+  const raw = String(usernameOrEmail || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (raw.includes("@")) return raw;
+
+  const { data, error } = await sb
+    .from("admins")
+    .select("auth_email")
+    .eq("username", raw)
+    .maybeSingle();
+
+  if (error) throw new Error("用户名查询失败：" + error.message);
+  if (!data?.auth_email) throw new Error("用户名不存在或已停用");
+
+  return String(data.auth_email).trim().toLowerCase();
+}
 
 async function doLogin() {
   const emailInput = document.getElementById("login-user");
   const passInput = document.getElementById("login-pass");
   const errorEl = document.getElementById("login-error");
 
-  const email = emailInput.value.trim();
+  const loginName = emailInput.value.trim();
   const password = passInput.value;
 
-  if (!email || !password) {
+  if (!loginName || !password) {
     errorEl.style.display = "block";
-    errorEl.textContent = "⚠ Please fill in all fields.";
+    errorEl.textContent = "⚠ 请填写所有字段。";
+    return;
+  }
+
+  let email = "";
+  try {
+    email = await resolveAdminEmail(loginName);
+  } catch (e) {
+    errorEl.style.display = "block";
+    errorEl.textContent = "⚠ " + e.message;
     return;
   }
 

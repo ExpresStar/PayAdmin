@@ -1,14 +1,15 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PayAdmin — Setup 2FA</title>
+  <title>PayAdmin â€” Setup 2FA</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Segoe UI', sans-serif;
+      font-family: 'Roboto', 'Segoe UI', sans-serif;
       background: #0f172a;
       min-height: 100vh;
       display: flex;
@@ -94,44 +95,44 @@
 <div class="card">
   <div class="logo">
     <img src="favicon.png" alt="Logo" onerror="this.style.display='none'">
-    <h1>PayAdmin — Setup 2FA</h1>
+    <h1>PayAdmin â€” Setup 2FA</h1>
     <p>Google Authenticator Configuration</p>
   </div>
 
   <div class="step">
     <div class="step-title"><span class="step-num">1</span>Scan QR Code dengan Google Authenticator</div>
-    <div class="step-body">Buka Google Authenticator → Klik <strong>+</strong> → <strong>Scan a QR code</strong></div>
+    <div class="step-body">Buka Google Authenticator â†’ Klik <strong>+</strong> â†’ <strong>Scan a QR code</strong></div>
     <div id="qr-wrap"><canvas id="qr-canvas" width="220" height="220"></canvas></div>
-    <div id="qr-error">⚠ QR gagal generate. Gunakan input manual di bawah.</div>
+    <div id="qr-error">âš  QR gagal generate. Gunakan input manual di bawah.</div>
     <div class="uri-box" id="uri-display"></div>
   </div>
 
   <div class="step">
-    <div class="step-title"><span class="step-num">2</span>Atau Input Key Secara Manual</div>
+    <div class="step-title"><span class="step-num">2</span>æˆ–æ‰‹åŠ¨è¾“å…¥å¯†é’¥</div>
     <div class="step-body">
-      Google Authenticator → <strong>Enter a setup key</strong><br><br>
-      · <strong>Account name:</strong> <code style="color:#38bdf8">admin</code><br>
-      · <strong>Your key:</strong> copy dari bawah (tanpa spasi)<br>
-      · <strong>Type of key:</strong> Time-based ✓
+      Google Authenticator â†’ <strong>è¾“å…¥è®¾ç½®å¯†é’¥</strong><br><br>
+      Â· <strong>è´¦æˆ·åç§°ï¼š</strong> <code style="color:#38bdf8">admin</code><br>
+      Â· <strong>ä½ çš„å¯†é’¥ï¼š</strong> ä»Žä¸‹æ–¹å¤åˆ¶ï¼ˆä¸è¦ç©ºæ ¼ï¼‰<br>
+      Â· <strong>å¯†é’¥ç±»åž‹ï¼š</strong> åŸºäºŽæ—¶é—´ âœ“
     </div>
     <div class="secret-box">
-      <div class="secret-label">Secret Key — Base32 — 32 Karakter</div>
+      <div class="secret-label">å¯†é’¥ â€” Base32 â€” 32 ä¸ªå­—ç¬¦</div>
       <div class="secret-key" id="secret-display-fmt"></div>
       <div class="secret-raw" id="secret-display-raw"></div>
     </div>
-    <button class="copy-btn" onclick="copySecret(event)">📋 Copy Key (tanpa spasi)</button>
+    <button class="copy-btn" onclick="copySecret(event)">ðŸ“‹ å¤åˆ¶å¯†é’¥ï¼ˆæ— ç©ºæ ¼ï¼‰</button>
   </div>
 
   <div class="verify-section">
-    <div class="verify-title">🔐 Tes Kode dari Google Authenticator</div>
+    <div class="verify-title">ðŸ” æµ‹è¯• Google Authenticator éªŒè¯ç </div>
     <input type="text" class="verify-input" id="test-code" maxlength="6" placeholder="000000"
       oninput="this.value=this.value.replace(/\D/g,'')" autocomplete="one-time-code" inputmode="numeric">
-    <button class="verify-btn" onclick="verifyCode()">✓ Verifikasi Kode</button>
+    <button class="verify-btn" onclick="verifyCode()">âœ“ éªŒè¯ä»£ç </button>
     <div class="verify-result" id="verify-result"></div>
   </div>
 
   <div class="warn-box">
-    ⚠ <strong>Secret key ini digunakan oleh semua admin.</strong> Simpan di tempat aman. Jangan bagikan ke siapapun di luar tim.
+    âš  <strong>æ­¤å¯†é’¥ç”±æ‰€æœ‰ç®¡ç†å‘˜å…±ç”¨ã€‚</strong> è¯·å¦¥å–„ä¿å­˜ï¼Œä¸è¦åˆ†äº«ç»™å›¢é˜Ÿä»¥å¤–çš„ä»»ä½•äººã€‚
   </div>
 </div>
 
@@ -139,7 +140,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script>
   // ================================================================
-  //  MASTER SECRET — WAJIB SAMA DENGAN script.js DAN chat.js
+  //  MASTER SECRET â€” WAJIB SAMA DENGAN script.js DAN chat.js
   //  Valid Base32: hanya huruf A-Z dan angka 2-7
   //  32 karakter = 20 byte = standar TOTP (RFC 6238)
   // ================================================================
@@ -151,15 +152,15 @@
   document.getElementById("secret-display-raw").textContent =
     "Untuk input manual (copy tanpa spasi): " + MASTER_SECRET;
 
-  // ── OTP URI — format MINIMAL yang 100% diterima Google Authenticator ──
+  // â”€â”€ OTP URI â€” format MINIMAL yang 100% diterima Google Authenticator â”€â”€
   // ATURAN PENTING:
   //   1. Format label: "Issuer:Account" (diikuti %3A sebagai ":")
-  //   2. Jangan tambahkan algorithm/digits/period — biarkan default
+  //   2. Jangan tambahkan algorithm/digits/period â€” biarkan default
   //   3. Secret UPPERCASE, tanpa spasi, tanpa padding "="
   const OTP_URI = "otpauth://totp/PayAdmin%3Aadmin?secret=" + MASTER_SECRET + "&issuer=PayAdmin";
   document.getElementById("uri-display").textContent = "URI: " + OTP_URI;
 
-  // ── Generate QR Code ──────────────────────────────────────────
+  // â”€â”€ Generate QR Code â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   window.addEventListener("load", function() {
     var qrErrorEl = document.getElementById("qr-error");
     var qrCanvas  = document.getElementById("qr-canvas");
@@ -176,12 +177,12 @@
       img.style.cssText = "background:white;padding:12px;border-radius:10px;display:block;width:220px;height:220px;";
       img.onerror = function() {
         qrErrorEl.style.display = "block";
-        qrErrorEl.textContent = "⚠ QR gagal (CDN diblokir?). Gunakan Copy Key manual di bawah.";
+        qrErrorEl.textContent = "âš  äºŒç»´ç ç”Ÿæˆå¤±è´¥ï¼ˆå¯èƒ½ CDN è¢«æ‹¦æˆªï¼‰ã€‚è¯·ä½¿ç”¨ä¸‹æ–¹æ‰‹åŠ¨å¤åˆ¶å¯†é’¥ã€‚";
       };
       qrWrap.insertBefore(img, qrCanvas);
     }
 
-    // Kalau library sama sekali tidak ada → Google Charts
+    // Kalau library sama sekali tidak ada â†’ Google Charts
     if (typeof QRCode === "undefined") {
       imageFallback();
       return;
@@ -196,7 +197,7 @@
         if (err) {
           console.warn("[QR] canvas gagal:", err);
           qrCanvas.style.display = "none";
-          // Coba 2: QR ke data URL → render ke <img>
+          // Coba 2: QR ke data URL â†’ render ke <img>
           QRCode.toDataURL(
             OTP_URI,
             { width: 220, margin: 2, errorCorrectionLevel: "M", color: { dark: "#000", light: "#fff" } },
@@ -218,7 +219,7 @@
     );
   });
 
-  // ── Copy ─────────────────────────────────────────────────────
+  // â”€â”€ Copy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function copySecret(e) {
     const btn = e.currentTarget;
     const fallback = () => {
@@ -232,13 +233,13 @@
     (navigator.clipboard ? navigator.clipboard.writeText(MASTER_SECRET) : Promise.reject())
       .catch(fallback)
       .finally(() => {
-        btn.textContent = "✓ Tersalin!";
-        setTimeout(() => { btn.textContent = "📋 Copy Key (tanpa spasi)"; }, 2000);
+        btn.textContent = "âœ“ å·²å¤åˆ¶ï¼";
+        setTimeout(() => { btn.textContent = "ðŸ“‹ å¤åˆ¶å¯†é’¥ï¼ˆæ— ç©ºæ ¼ï¼‰"; }, 2000);
       });
   }
 
-  // ── TOTP verifikasi (pure JS, TANPA library) ─────────────────
-  // Menggunakan Web Crypto API bawaan browser — tidak perlu otplib
+  // â”€â”€ TOTP verifikasi (pure JS, TANPA library) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Menggunakan Web Crypto API bawaan browser â€” tidak perlu otplib
   async function computeTOTP(secretB32, timestepSeconds) {
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
     let bits = 0, val = 0;
@@ -272,34 +273,35 @@
     if (code.length !== 6) {
       resultEl.style.display = "block";
       resultEl.className = "verify-result fail";
-      resultEl.textContent = "⚠ Masukkan 6 digit kode dari Google Authenticator";
+      resultEl.textContent = "âš  è¯·è¾“å…¥ Google Authenticator ä¸­çš„ 6 ä½éªŒè¯ç ";
       return;
     }
 
     try {
       const now = Math.floor(Date.now() / 1000);
-      // Toleransi ±1 window (±30 detik) untuk kompensasi clock skew
-      const [prev, curr, next] = await Promise.all([
-        computeTOTP(MASTER_SECRET, now - 30),
-        computeTOTP(MASTER_SECRET, now),
-        computeTOTP(MASTER_SECRET, now + 30),
-      ]);
+      // Toleransi Âplus/minus 2 window agar kode tetap valid saat mendekati pergantian 30 detik
+      // dan tahan jika jam HP/browser selisih beberapa detik.
+      const offsets = [-60, -30, 0, 30, 60];
+      const tokens = await Promise.all(
+        offsets.map((offset) => computeTOTP(MASTER_SECRET, now + offset))
+      );
+      const curr = tokens[2];
 
       resultEl.style.display = "block";
-      if ([prev, curr, next].includes(code)) {
+      if (tokens.includes(code)) {
         resultEl.className = "verify-result ok";
-        resultEl.innerHTML = "✓ BERHASIL! Kode cocok (" + curr + ").<br>Setup 2FA selesai. Anda bisa login sekarang.";
+        resultEl.innerHTML = "âœ“ æˆåŠŸï¼éªŒè¯ç åŒ¹é…ã€‚<br>2FA è®¾ç½®å®Œæˆï¼Œä½ çŽ°åœ¨å¯ä»¥ç™»å½•ã€‚";
       } else {
         resultEl.className = "verify-result fail";
         resultEl.innerHTML =
-          "✗ KODE SALAH. Expected: <strong>" + curr + "</strong><br>" +
-          "Pastikan: waktu HP sinkron otomatis (Settings → Date &amp; Time → Set Automatically ✓)<br>" +
-          "Dan pastikan Anda scan QR / input key yang ada di halaman ini.";
+          "âœ— éªŒè¯ç é”™è¯¯ã€‚å½“å‰åº”ä¸ºï¼š<strong>" + curr + "</strong><br>" +
+          "è¯·ç¡®è®¤ï¼šæ‰‹æœºæ—¶é—´å·²è‡ªåŠ¨åŒæ­¥ï¼ˆè®¾ç½® â†’ æ—¥æœŸä¸Žæ—¶é—´ â†’ è‡ªåŠ¨è®¾ç½® âœ“ï¼‰<br>" +
+          "å¹¶ç¡®è®¤ä½ å·²æ‰«ææœ¬é¡µäºŒç»´ç æˆ–æ­£ç¡®è¾“å…¥å¯†é’¥ã€‚";
       }
     } catch (e) {
       resultEl.style.display = "block";
       resultEl.className = "verify-result fail";
-      resultEl.textContent = "Error: " + e.message;
+      resultEl.textContent = "é”™è¯¯ï¼š" + e.message;
     }
   }
 
@@ -309,3 +311,4 @@
 </script>
 </body>
 </html>
+
