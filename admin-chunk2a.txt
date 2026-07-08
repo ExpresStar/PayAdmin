@@ -1,0 +1,67 @@
+      <!-- MODAL: ADD WORKER -->
+      <div id="addWorkerModal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>添加新员工</h2>
+            <button class="modal-close" onclick="closeAddWorkerModal()">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>员工名称 *</label>
+              <input type="text" id="workerName" placeholder="例：小婷" />
+            </div>
+            <div class="form-group">
+              <label>用户ID *</label>
+              <input type="text" id="workerUserId" placeholder="例：xiaoting99" />
+            </div>
+            <div class="form-group">
+              <label>班次 *</label>
+              <select id="workerShift">
+                <option value="">请选择班次</option>
+                <option value="pagi">早班 (08:00-16:00)</option>
+                <option value="siang">中班 (12:00-20:00)</option>
+                <option value="malam">晚班 (20:00-04:00)</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAddWorkerModal()">取消</button>
+            <button class="btn btn-primary" onclick="submitAddWorker()">添加</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: SHIFT SWAP -->
+      <div id="shiftSwapModal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>班次交换申请</h2>
+            <button class="modal-close" onclick="closeShiftSwapModal()">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>申请者 (谁要交换班次) *</label>
+              <select id="swapFromWorker"><option value="">请选择员工</option></select>
+            </div>
+            <div class="form-group">
+              <label>接收者 (谁接受这个班次) *</label>
+              <select id="swapToWorker"><option value="">请选择员工</option></select>
+            </div>
+            <div class="form-group">
+              <label>交换日期 *</label>
+              <input type="date" id="swapDate" />
+            </div>
+            <div class="form-group">
+              <label>备注 (可选)</label>
+              <textarea id="swapNotes" placeholder="添加备注信息..." style="height:80px;"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeShiftSwapModal()">取消</button>
+            <button class="btn btn-primary" onclick="submitShiftSwap()">提交申请</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>

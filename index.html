@@ -422,7 +422,13 @@
               >
                 ↺
               </button>
-              <!-- <button class="toolbar-btn" onclick="buildTable()" title="Refresh">↺</button> -->
+              <select id="tx-per-page" onchange="changeTxPageSize()" class="toolbar-btn" style="width: auto; padding: 0 8px; border: none; background: transparent; cursor: pointer; outline: none; font-size: 13px; color: #4b5563;">
+                <option value="10">10 / 页</option>
+                <option value="15" selected>15 / 页</option>
+                <option value="30">30 / 页</option>
+                <option value="50">50 / 页</option>
+                <option value="100">100 / 页</option>
+              </select>
               <button class="toolbar-btn active" title="列表视图">≡</button>
               <button class="toolbar-btn" title="网格视图">⊞</button>
               <button class="toolbar-btn" onclick="toggleFilterPanel()" title="切换筛选器">↓</button>
@@ -478,7 +484,13 @@
                 <p>已完成与失败的交易</p>
               </div>
 
-              <div class="history-actions">
+              <div class="history-actions" style="display: flex; gap: 8px;">
+                <select id="history-per-page" onchange="changeHistoryPageSize()" class="toolbar-btn" style="width: auto; padding: 0 8px; border: none; background: transparent; cursor: pointer; outline: none; font-size: 13px; color: #4b5563; height: 100%;">
+                  <option value="10" selected>10 / 页</option>
+                  <option value="30">30 / 页</option>
+                  <option value="50">50 / 页</option>
+                  <option value="100">100 / 页</option>
+                </select>
                 <button
                   class="toolbar-btn"
                   onclick="loadHistory()"

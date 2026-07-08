@@ -1,0 +1,297 @@
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const supabaseUrl = "https://lnlzrfubxeiocdtcgtgg.supabase.co";
+    const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxubHpyZnVieGVpb2NkdGNndGdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDMwNzg0MDAsImV4cCI6MTg2MDg0NTIwMH0.qjV_9C9H9S4Zk3sLdI-wQ3lQ5rQ5lQ5rQ5lQ5rQ5lQ";
+    window.supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
+  </script>
+  <script>
+    const sb = window.supabaseClient;
+    const ADMIN_ID = sessionStorage.getItem("adminId");
+    const ADMIN_EMAIL = sessionStorage.getItem("_admin_email");
+
+    function switchPage(pageName) {
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+      document.querySelectorAll(".menu-link").forEach(l => l.classList.remove("active"));
+      document.getElementById(pageName).classList.add("active");
+      const link = document.querySelector(`a[onclick="switchPage('${pageName}')"]`);
+      if (link) link.classList.add("active");
+      if (pageName === "dashboard") loadDashboard();
+      if (pageName === "workers") loadWorkers();
+      if (pageName === "bots") loadBots();
+      if (pageName === "transactions") loadTransactions();
+      if (pageName === "shifts") loadShiftSwaps();
+    }
+
+    function logout() {
+      if (confirm("确定要登出？")) {
+        sessionStorage.clear();
+        window.location.href = "/admin-login.html";
+      }
+    }
+
+    async function loadDashboard() {
+      try {
+        const { count: workerCount } = await sb.from("workers").select("*", { count: "exact" });
+        const { count: botCount } = await sb.from("bot_instances").select("*", { count: "exact" }).eq("status", "running");
+        document.getElementById("statWorkers").textContent = workerCount || 0;
+        document.getElementById("statBots").textContent = botCount || 0;
+      } catch (err) { console.error("Dashboard error:", err); }
+    }
+
+    function openAddWorkerModal() { document.getElementById("addWorkerModal").classList.add("active"); }
+    function closeAddWorkerModal() {
+      document.getElementById("addWorkerModal").classList.remove("active");
+      document.getElementById("workerName").value = "";
+      document.getElementById("workerUserId").value = "";
+    }
+    function openShiftSwapModal() {
+      document.getElementById("shiftSwapModal").classList.add("active");
+      loadWorkerSelects();
+    }
+    function closeShiftSwapModal() { document.getElementById("shiftSwapModal").classList.remove("active"); }
+
+    async function loadWorkers() {
+      try {
+        const { data: workers, error } = await sb.from("workers").select("*").order("created_at", { ascending: false });
+        if (error) throw error;
+        const tbody = document.getElementById("workersTable");
+        if (!workers || workers.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">暂无数据</td></tr>';
+          return;
+        }
+        tbody.innerHTML = workers.map(w => `
+          <tr>
+            <td><strong>${w.name}</strong></td>
+            <td><code>${w.user_id}</code></td>
+            <td>${getShiftLabel(w.shift)}</td>
+            <td><span class="status-badge ${w.status === 'active' ? 'status-active' : 'status-inactive'}">${w.status === 'active' ? '活跃' : '停用'}</span></td>
+            <td><button class="btn btn-small" onclick="deleteWorker('${w.id}')">删除</button></td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        console.error("Load workers error:", err);
+        showAlert("workerAlert", "加载失败: " + err.message, "error");
+      }
+    }
+
+    async function submitAddWorker() {
+      const name = document.getElementById("workerName").value.trim();
+      const userId = document.getElementById("workerUserId").value.trim();
+      const shift = document.getElementById("workerShift").value;
+      if (!name || !userId || !shift) {
+        showAlert("workerAlert", "请填写所有字段", "error");
+        return;
+      }
+      try {
+        const { error } = await sb.from("workers").insert({ name, user_id: userId, shift, status: "active" });
+        if (error) throw error;
+        showAlert("workerAlert", "员工添加成功", "success");
+        closeAddWorkerModal();
+        loadWorkers();
+      } catch (err) {
+        showAlert("workerAlert", "添加失败: " + err.message, "error");
+      }
+    }
+
+    async function deleteWorker(workerId) {
+      if (!confirm("确定要删除此员工？")) return;
+      try {
+        const { error } = await sb.from("workers").delete().eq("id", workerId);
+        if (error) throw error;
+        showAlert("workerAlert", "员工已删除", "success");
+        loadWorkers();
+      } catch (err) {
+        showAlert("workerAlert", "删除失败: " + err.message, "error");
+      }
+    }
+
+    async function loadBots() {
+      try {
+        const { data: bots, error } = await sb.from("bot_instances").select(`*,workers:worker_id(name,user_id)`).order("created_at", { ascending: false });
+        if (error) throw error;
+        const tbody = document.getElementById("botsTable");
+        if (!bots || bots.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无数据</td></tr>';
+          return;
+        }
+        tbody.innerHTML = bots.map(b => `
+          <tr>
+            <td>${b.workers?.name || "未知"}</td>
+            <td>${b.bot_type}</td>
+            <td><span class="status-badge ${b.status === 'running' ? 'status-running' : 'status-stopped'}">${b.status}</span></td>
+            <td>${formatTime(b.last_heartbeat)}</td>
+            <td>${b.error_count || 0}</td>
+            <td><button class="btn btn-small" onclick="restartBot('${b.id}')">${b.status === 'running' ? '停止' : '启动'}</button></td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        console.error("Load bots error:", err);
+        showAlert("botAlert", "加载失败: " + err.message, "error");
+      }
+    }
+
+    async function restartBot(botId) {
+      try {
+        const { error } = await sb.from("bot_instances").update({ status: "running", last_started: new Date().toISOString() }).eq("id", botId);
+        if (error) throw error;
+        showAlert("botAlert", "机器人已重启", "success");
+        loadBots();
+      } catch (err) {
+        showAlert("botAlert", "重启失败: " + err.message, "error");
+      }
+    }
+
+    async function loadTransactions() {
+      try {
+        const { data: txs, error } = await sb.from("transactions").select("*").order("created_at", { ascending: false }).limit(50);
+        if (error) throw error;
+        const tbody = document.getElementById("transactionsTable");
+        if (!txs || txs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无数据</td></tr>';
+          return;
+        }
+        tbody.innerHTML = txs.map(t => `
+          <tr>
+            <td><code>${t.transaction_id?.slice(0, 12)}...</code></td>
+            <td>${formatNumber(t.amount)}</td>
+            <td>${t.account_number || "—"}</td>
+            <td><span class="status-badge">${t.status}</span></td>
+            <td>${formatTime(t.created_at)}</td>
+            <td><button class="btn btn-small">详情</button></td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        console.error("Load transactions error:", err);
+      }
+    }
+
+    async function filterTransactions() {
+      const txId = document.getElementById("txFilter").value.trim();
+      const status = document.getElementById("txStatusFilter").value;
+      let query = sb.from("transactions").select("*");
+      if (txId) query = query.ilike("transaction_id", `%${txId}%`);
+      if (status) query = query.eq("status", status);
+      try {
+        const { data: txs, error } = await query.limit(50);
+        if (error) throw error;
+        const tbody = document.getElementById("transactionsTable");
+        tbody.innerHTML = txs.map(t => `
+          <tr>
+            <td><code>${t.transaction_id?.slice(0, 12)}...</code></td>
+            <td>${formatNumber(t.amount)}</td>
+            <td>${t.account_number || "—"}</td>
+            <td><span class="status-badge">${t.status}</span></td>
+            <td>${formatTime(t.created_at)}</td>
+            <td><button class="btn btn-small">详情</button></td>
+          </tr>
+        `).join("");
+      } catch (err) { console.error("Filter error:", err); }
+    }
+
+    async function loadWorkerSelects() {
+      try {
+        const { data: workers } = await sb.from("workers").select("id, name, user_id");
+        const fromSelect = document.getElementById("swapFromWorker");
+        const toSelect = document.getElementById("swapToWorker");
+        fromSelect.innerHTML = workers.map(w => `<option value="${w.id}">${w.name} (${w.user_id})</option>`).join("");
+        toSelect.innerHTML = workers.map(w => `<option value="${w.id}">${w.name} (${w.user_id})</option>`).join("");
+      } catch (err) { console.error("Load workers select error:", err); }
+    }
+
+    async function submitShiftSwap() {
+      const fromId = document.getElementById("swapFromWorker").value;
+      const toId = document.getElementById("swapToWorker").value;
+      const swapDate = document.getElementById("swapDate").value;
+      const notes = document.getElementById("swapNotes").value;
+      if (!fromId || !toId || !swapDate) {
+        showAlert("shiftAlert", "请填写必填字段", "error");
+        return;
+      }
+      try {
+        const { error } = await sb.from("shift_swaps").insert({
+          request_from: fromId,
+          request_to: toId,
+          swap_date: swapDate,
+          notes,
+          status: "pending"
+        });
+        if (error) throw error;
+        showAlert("shiftAlert", "班次交换申请已提交", "success");
+        closeShiftSwapModal();
+        loadShiftSwaps();
+      } catch (err) {
+        showAlert("shiftAlert", "提交失败: " + err.message, "error");
+      }
+    }
+
+    async function loadShiftSwaps() {
+      try {
+        const { data: swaps, error } = await sb.from("shift_swaps").select(`*,worker_from:request_from(name),worker_to:request_to(name)`).order("created_at", { ascending: false });
+        if (error) throw error;
+        const tbody = document.getElementById("shiftSwapsTable");
+        if (!swaps || swaps.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">暂无数据</td></tr>';
+          return;
+        }
+        tbody.innerHTML = swaps.map(s => `
+          <tr>
+            <td>${s.worker_from?.name || "未知"}</td>
+            <td>${s.worker_to?.name || "未知"}</td>
+            <td>${s.swap_date}</td>
+            <td><span class="status-badge ${s.status === 'approved' ? 'status-active' : 'status-inactive'}">${s.status === 'approved' ? '已批准' : '待处理'}</span></td>
+            <td>${s.status === 'pending' ? `<button class="btn btn-small" onclick="approveSwap('${s.id}')">批准</button>` : '已处理'}</td>
+          </tr>
+        `).join("");
+      } catch (err) { console.error("Load swaps error:", err); }
+    }
+
+    async function approveSwap(swapId) {
+      try {
+        const { error } = await sb.from("shift_swaps").update({ status: "approved", admin_approver: ADMIN_EMAIL, approved_at: new Date().toISOString() }).eq("id", swapId);
+        if (error) throw error;
+        showAlert("shiftAlert", "班次交换已批准", "success");
+        loadShiftSwaps();
+      } catch (err) {
+        showAlert("shiftAlert", "批准失败: " + err.message, "error");
+      }
+    }
+
+    function getShiftLabel(shift) {
+      const labels = { pagi: "早班", siang: "中班", malam: "晚班" };
+      return labels[shift] || shift;
+    }
+
+    function formatTime(isoDate) {
+      if (!isoDate) return "—";
+      return new Date(isoDate).toLocaleString("zh-CN");
+    }
+
+    function formatNumber(num) {
+      return num?.toLocaleString("vi-VN") + " VND" || "0";
+    }
+
+    function showAlert(elementId, message, type = "success") {
+      const el = document.getElementById(elementId);
+      el.className = `alert alert-${type} show`;
+      el.textContent = message;
+      setTimeout(() => el.classList.remove("show"), 5000);
+    }
+
+    window.addEventListener("load", () => {
+      if (!sessionStorage.getItem("adminLoggedIn")) {
+        window.location.href = "/admin-login.html";
+        return;
+      }
+      document.getElementById("userName").textContent = ADMIN_EMAIL?.split("@")[0] || "Admin";
+      document.getElementById("userEmail").textContent = ADMIN_EMAIL || "admin@918pay";
+      loadDashboard();
+    });
+
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") {
+        document.querySelectorAll(".modal.active").forEach(m => m.classList.remove("active"));
+      }
+    });
+  </script>
+</body>
+</html>

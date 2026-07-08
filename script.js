@@ -143,7 +143,7 @@ let currentUser = "admin";
 let txCache = []; // current page rows, used by modal lookups
 let filteredTotal = 0; // server-side count for pagination
 let currentPage = 1;
-const PAGE_SIZE = 15;
+let PAGE_SIZE = 15;
 
 let rejectTargetId = null;
 let confirmTargetId = null;
@@ -153,8 +153,9 @@ let historyTotal = 0;
 let isBotRunning = false;
 let botHost = null;
 let lastTime = Date.now();
+let lastProcessTime = Date.now();
 let historyPage = 1;
-const HISTORY_LIMIT = 10;
+let HISTORY_LIMIT = 10;
 let selectedBank = null; // for filtering
 let isSearching = false;
 let presenceChannel = null; // ⬅️ Global agar bisa ditutup saat logout
@@ -194,23 +195,27 @@ function getCurrentHour() {
 function getTrafficConfig() {
   const h = new Date().getHours(); // local time (assumed WIB on client)
 
-  // Dinamis: jam ramai lebih cepat, jam sepi lebih lambat
-  if (h >= 8 && h < 22) {
-    // Peak hours: 08:00-21:59
+  // Ramai:
+  // 08.00 - 11.59 (8-11)
+  // 13.00 - 17.59 (13-17)
+  // 20.00 - 04.59 (20-23, 0-4)
+  const isRamai =
+    (h >= 8 && h < 12) ||
+    (h >= 13 && h < 18) ||
+    (h >= 20 || h < 5);
+
+  if (isRamai) {
     return {
-      insertDelay: [1200, 2400], // 1.2s - 2.4s antar transaksi baru
-      processDelay: [4000, 9000], // 4s - 9s untuk alur proses
-    };
-  } else if ((h >= 6 && h < 8) || (h >= 22 && h < 24)) {
-    // Shoulder hours: 06:00-07:59 & 22:00-23:59
-    return {
-      insertDelay: [2500, 4200],
-      processDelay: [7000, 14000],
+      insertDelay: [1200, 2400], // 1.2s - 2.4s antar transaksi baru (ramai)
+      processDelay: [4000, 9000], 
     };
   } else {
-    // Quiet hours: 00:00-05:59
+    // Sedikit:
+    // 05.00 - 07.59 (5-7)
+    // 12.00 - 12.59 (12)
+    // 18.00 - 19.59 (18-19)
     return {
-      insertDelay: [4500, 8000],
+      insertDelay: [4500, 8000], // 4.5s - 8s antar transaksi baru (sedikit)
       processDelay: [10000, 18000],
     };
   }
@@ -227,17 +232,17 @@ function fmtAmount(n) {
 function fmtTime(iso) {
   if (!iso) return '<span style="color:#ccc">—</span>';
 
-  const d = new Date(iso);
+  // Supabase returns timestamps without 'Z' — append it to ensure UTC parsing
+  const safeIso = String(iso).endsWith('Z') ? iso : iso + 'Z';
+  const d = new Date(safeIso);
 
-  // tambah +7 jam manual (WIB)
-  d.setHours(d.getHours() + 7);
-
-  const date = d.toLocaleDateString("id-ID");
+  const date = d.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta" });
   const time = d.toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
+    timeZone: "Asia/Jakarta",
   });
 
   return `<span class="td-time">${date}<br>${time}</span>`;
@@ -570,10 +575,12 @@ function renderRejectScreenshotCanvas(tx, mismatch, botName) {
   // ── Kolom Created / Process Time ───────────────────────────────────────
   function fmtDateShort(iso) {
     if (!iso) return "—";
-    const d = new Date(iso);
-    d.setHours(d.getHours() + 7);
-    const ymd = `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
-    const hms = d.toTimeString().slice(0,8);
+    const safeIso = String(iso).endsWith('Z') ? iso : iso + 'Z';
+    const d = new Date(safeIso);
+    // Gunakan Jakarta timezone untuk display
+    const parts = d.toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', hour12: false }).split(', ');
+    const ymd = parts[0] || '';
+    const hms = parts[1] || '';
     return { ymd, hms };
   }
   const cr = fmtDateShort(tx.created_at);
@@ -654,60 +661,35 @@ async function botSendRejectSequence(
   mismatch,
   slowMultiplier = 1,
 ) {
-  // 1) Screenshot tabel row — canvas yang mirip tampilan tabel asli
-  const canvas = renderRejectScreenshotCanvas(tx, mismatch, botName);
-  const fileName = `reject-bot-${tx.id}-${Date.now()}.png`;
-  const imageUrl = await uploadCanvasAsChatImage(canvas, fileName);
+  const statusMap = {
+    "Pending": "待处理",
+    "Processing": "处理中",
+    "Completed": "已完成",
+    "Failed": "已拒绝",
+    "Expired": "已过期"
+  };
+  const txStatus = statusMap[tx.status] || "待处理";
 
-  // Caption = TX ID (seperti yang terlihat di screenshot)
-  await insertChatMessage({
-    room: "reject",
-    username: botName,
-    type: "image",
-    message: `${imageUrl}|--CAPTION--|${tx.transaction_id || tx.id}`,
-  });
+  // Teks selalu menggunakan Main Layout
+  const msgText = `╭────────────────────────╮\n         933PAY\n╰────────────────────────╯\n\n【存款订单】\n\n订单号 │ ${tx.transaction_id || tx.id}\n金额   │ ${fmtAmount(tx.amount || 0)} VND\n\n银行   │ ${shortBank(tx.bank_name || "")}\n姓名   │ ${tx.account_name || ""}\n账号   │ ${tx.account_number || ""}\n\n状态   │ ${txStatus}\n\n────────────────────────\n\n.bank   .name   .bil`;
+  
+  const captionHtml = `<pre style="font-family: 'Courier New', Courier, monospace; margin: 0; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; color: #fff;">${msgText}</pre>`;
 
   await new Promise((r) =>
     setTimeout(r, (700 + Math.random() * 900) * slowMultiplier),
   );
 
-  // 2) Copy-paste semua kolom dalam satu baris (persis seperti copy teks dari tabel)
-  const txId   = String(tx.transaction_id || "");
-  const txIdA  = txId.slice(0, 16);
-  const txIdB  = txId.slice(16);
-  const copyLine = [
-    txIdA,
-    txIdB,
-    String(tx.order_id      || ""),
-    String(tx.account_number || ""),
-    fmtAmount(tx.amount || 0),
-    String(tx.account_name  || ""),
-    shortBank(tx.bank_name  || ""),
-    String(tx.status        || "Pending"),
-  ].filter(Boolean).join(" ");
+  // Buat screenshot
+  const canvas = renderRejectScreenshotCanvas(tx, mismatch, botName);
+  const fileName = `reject-bot-${tx.id}-${Date.now()}.png`;
+  const imageUrl = await uploadCanvasAsChatImage(canvas, fileName);
 
+  // Kirim hanya SATU pesan: Gambar dengan caption teks lengkap
   await insertChatMessage({
     room: "reject",
     username: botName,
-    type: "user",
-    message: copyLine,
-  });
-
-  await new Promise((r) =>
-    setTimeout(r, (600 + Math.random() * 800) * slowMultiplier),
-  );
-
-  // 3) Kode error singkat (.bil / .name / .bank) — sama seperti format lama
-  const errCode = mismatch.wrongNominal ? ".bil"
-    : mismatch.wrongName  ? ".name"
-    : mismatch.wrongBank  ? ".bank"
-    : ".reject";
-
-  await insertChatMessage({
-    room: "reject",
-    username: botName,
-    type: "user",
-    message: errCode,
+    type: "image",
+    message: `${imageUrl}|--CAPTION--|${captionHtml}`,
   });
 }
 
@@ -799,21 +781,37 @@ async function botProcessPendingTick() {
     const { data: pendingBatch } = await sb
       .from("transactions")
       .select(
-        "id,status,transaction_id,account_number,account_name,bank_name,amount,created_at",
+        "id,status,transaction_id,account_number,account_name,bank_name,amount,created_at,process_time",
       )
       .eq("status", "Pending")
       .is("assigned_to", null)
       .gte("created_at", startOfToday) // Hanya transaksi hari ini agar sinkron dengan dashboard default
-      // oldest first
       .order("created_at", { ascending: true })
-      // process one at a time to avoid over-speed
-      .limit(1);
+      .limit(20);
 
     if (!pendingBatch || pendingBatch.length === 0) return;
 
+    const nowMs = Date.now();
+    const validBatch = pendingBatch.filter(tx => {
+      if (!tx.process_time) return true;
+      // Supabase mengembalikan timestamp TANPA 'Z' - tambahkan agar parse sebagai UTC
+      const ptStr = tx.process_time.endsWith('Z') ? tx.process_time : tx.process_time + 'Z';
+      const pt = new Date(ptStr);
+      return nowMs >= pt.getTime();
+    });
+
+    if (validBatch.length === 0) return;
+
+    // Ambil 1 transaksi teratas yang sudah 'matang'
+    const txToProcess = validBatch[0];
+
     const nowIso = new Date().toISOString();
 
-    for (const tx of pendingBatch) {
+    for (const tx of [txToProcess]) {
+      // Tunggu 2-5 detik sebelum bot bereaksi mengambil nota ini (memberi kesempatan manusia)
+      const reactionDelayMs = 2000 + Math.random() * 3000;
+      await new Promise(r => setTimeout(r, reactionDelayMs));
+
       const botName = WORKERS[Math.floor(Math.random() * WORKERS.length)];
       const mismatch = getTxMismatch(tx);
       const isReject = mismatch.anyWrong;
@@ -904,23 +902,39 @@ async function workerBotOneTick(botName) {
 
     const { data: pendingList, error } = await sb
       .from("transactions")
-      .select("id,transaction_id,order_id,account_number,account_name,bank_name,amount,created_at,status")
+      .select("id,transaction_id,order_id,account_number,account_name,bank_name,amount,created_at,process_time,status")
       .eq("status", "Pending")
       .is("assigned_to", null)
       .gte("created_at", startOfToday) // Hanya transaksi hari ini agar sinkron dengan dashboard default
       .order("created_at", { ascending: true }) // tertua pertama
-      .limit(5); // ambil 5 untuk mengurangi collision dan memberi ruang bagi bot/human lain
+      .limit(20); // ambil lebih banyak supaya bisa difilter di sisi client
 
     if (error) { console.error(`[WorkerBot][${botName}] fetch error:`, error.message); return; }
     if (!pendingList || pendingList.length === 0) return; // tidak ada TX
 
-    // Pilih random dari 3 teratas untuk variasi (agar tidak semua bot rebut TX yang sama persis)
-    const tx = pendingList[Math.floor(Math.random() * pendingList.length)];
+    // Filter transaksi yang waktu pengerjaannya (process_time) sudah terlewat
+    const nowMs = Date.now();
+    const validList = pendingList.filter(tx => {
+      if (!tx.process_time) return true;
+      // Supabase mengembalikan timestamp TANPA 'Z' suffix (misal: "2026-07-08T10:00:00.000")
+      // Kita harus tambahkan 'Z' agar browser parse sebagai UTC, bukan waktu lokal
+      const ptStr = tx.process_time.endsWith('Z') ? tx.process_time : tx.process_time + 'Z';
+      const pt = new Date(ptStr);
+      return nowMs >= pt.getTime();
+    });
+
+    if (validList.length === 0) {
+      // Belum ada yang 'matang' / siap dikerjakan
+      return;
+    }
+
+    // Pilih random dari yang sudah matang (ambil 5 teratas)
+    const topValid = validList.slice(0, 5);
+    const tx = topValid[Math.floor(Math.random() * topValid.length)];
     
     // 2. Simulasi waktu reaksi manusia untuk membaca/melihat nota baru di layar
-    // Bot menunggu 6–15 detik sebelum mencoba klik/klaim.
-    // Selama waktu tunggu ini, pekerja manusia bisa mengklik/proses duluan.
-    const reactionDelayMs = 6000 + Math.random() * 9000;
+    // Kadang delay 2 detik, kadang 5 detik
+    const reactionDelayMs = 2000 + Math.random() * 3000;
     await new Promise(r => setTimeout(r, reactionDelayMs));
 
     const nowIso = new Date().toISOString();
@@ -1015,8 +1029,67 @@ async function workerBotLoop(botName) {
 // ─────────────────────────────────────────────────────
 //  CORE DATA LAYER
 // ─────────────────────────────────────────────────────
+async function forceUnlockTx() {
+  const txId = prompt("Masukkan Transaction ID yang nyangkut (misal: TX...):");
+  if (!txId) return;
+  const tid = txId.trim();
+
+  const { data, error: fetchErr } = await sb
+    .from("transactions")
+    .select("id, status, assigned_to")
+    .eq("transaction_id", tid)
+    .single();
+
+  if (fetchErr || !data) {
+    showError("❌ Transaction ID tidak ditemukan!");
+    return;
+  }
+  
+  if (data.status !== "Pending") {
+    showError("❌ Nota ini statusnya sudah " + data.status + ", tidak perlu di-unlock.");
+    return;
+  }
+
+  if (!data.assigned_to) {
+    showError("✅ Nota ini sedang tidak dikunci oleh siapa-siapa.");
+    return;
+  }
+
+  const { error } = await sb
+    .from("transactions")
+    .update({ assigned_to: null, process_time: null })
+    .eq("transaction_id", tid);
+    
+  if (error) {
+    showError("❌ Gagal membuka kuncian: " + error.message);
+  } else {
+    showError("✅ Berhasil membuka kuncian nota " + tid + "!");
+    loadTransactions();
+  }
+}
+
+async function cleanupStuckClaims() {
+  // If process_time is older than 15 seconds, it means the bot crashed or page was refreshed
+  // (Bot processing maxes out around 9 seconds)
+  const cutoff = new Date(Date.now() - 15000).toISOString();
+  await sb
+    .from("transactions")
+    .update({ assigned_to: null, process_time: null })
+    .eq("status", "Pending")
+    .neq("assigned_to", null)
+    .neq("process_time", null)
+    .in("assigned_to", [...WORKERS, "System"]) // Only clear stuck BOT claims, humans can take their time
+    .lt("process_time", cutoff);
+}
+
+// Jalankan pembersihan otomatis setiap 10 detik di background
+setInterval(cleanupStuckClaims, 10000);
+
 async function loadTransactions() {
   showTableLoading();
+
+  // Clean up stuck transactions (orphaned claims) automatically
+  cleanupStuckClaims();
 
   const fTxId = (document.getElementById("f-txid")?.value || "").trim();
   const fOrderId = (document.getElementById("f-orderid")?.value || "").trim();
@@ -1031,15 +1104,19 @@ async function loadTransactions() {
 
   let query = sb
     .from("transactions")
-    .select("*", { count: "exact" })
-    .not("status", "ilike", "completed")
-    .not("status", "ilike", "failed");
+    .select("*", { count: "exact" });
+
+  if (fStatus) {
+    query = query.eq("status", fStatus);
+  } else {
+    // Secara default, hanya tampilkan Pending dan Processing di halaman Transaksi
+    query = query.in("status", ["Pending", "Processing"]);
+  }
 
   if (fTxId) query = query.ilike("transaction_id", `%${fTxId}%`);
   if (fOrderId) query = query.ilike("order_id", `%${fOrderId}%`);
   if (fAccNum) query = query.ilike("account_number", `%${fAccNum}%`);
   if (fAccName) query = query.ilike("account_name", `%${fAccName}%`);
-  if (fStatus) query = query.eq("status", fStatus);
   if (fBank) query = query.eq("bank_name", fBank);
   // ✅ FINAL TIMEZONE FIX (Local to UTC Boundary)
   if (fDateFrom) {
@@ -1102,12 +1179,12 @@ function renderTable(rows) {
       const processTime = tx.process_time;
       const completedAt = tx.completed_time;
 
-      let pastProcess = false;
+      let pastProcess = true;
 
       if (processTime) {
-        const pt = new Date(processTime);
-        pt.setHours(pt.getHours() + 7); // WIB
-
+        // Supabase timestamps tanpa Z — tambahkan agar parse sebagai UTC
+        const ptStr = String(processTime).endsWith('Z') ? processTime : processTime + 'Z';
+        const pt = new Date(ptStr);
         pastProcess = nowMs >= pt.getTime();
       }
       const statusLower = (status || "").toLowerCase().trim();
@@ -1162,6 +1239,15 @@ function renderTable(rows) {
 // ─────────────────────────────────────────────────────
 //  PAGINATION  (server-side count)
 // ─────────────────────────────────────────────────────
+function changeTxPageSize() {
+  const select = document.getElementById("tx-per-page");
+  if (select) {
+    PAGE_SIZE = parseInt(select.value) || 15;
+    currentPage = 1;
+    loadTransactions();
+  }
+}
+
 function buildPagination() {
   const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
   document.getElementById("pagination-info").textContent =
@@ -1633,7 +1719,7 @@ async function openConfirm(uid) {
 
   if (latest.assigned_to && latest.assigned_to !== currentUser) {
     showError(
-      `失败！该数据正在由 <b>${latest.assigned_to}</b> 处理中。`,
+      `哎呀！检测到冲突<br><br><span style="font-size:12px;color:#64748b;font-weight:normal">该数据正在由 <b>${latest.assigned_to}</b> 处理中。</span>`
     );
     loadTransactions();
     return;
@@ -1642,12 +1728,12 @@ async function openConfirm(uid) {
   if (!latest.assigned_to) {
     const { error: claimErr } = await sb
       .from("transactions")
-      .update({ assigned_to: currentUser })
+      .update({ assigned_to: currentUser, process_time: new Date().toISOString() })
       .eq("id", uid)
       .is("assigned_to", null);
 
     if (claimErr) {
-      showError("获取数据失败，可能刚被其他管理员接手。");
+      showError("获取数据失败，可能刚被别人接手。");
       loadTransactions();
       return;
     }
@@ -1736,7 +1822,7 @@ async function openReject(uid) {
 
   if (latest.assigned_to && latest.assigned_to !== currentUser) {
     showError(
-      `提示！该数据当前正由 <b>${latest.assigned_to}</b> 处理。`,
+      `哎呀！检测到冲突<br><br><span style="font-size:12px;color:#64748b;font-weight:normal">该数据当前正由 <b>${latest.assigned_to}</b> 处理。</span>`
     );
     loadTransactions();
     return;
@@ -1745,7 +1831,7 @@ async function openReject(uid) {
   if (!latest.assigned_to) {
     const { error: claimErr } = await sb
       .from("transactions")
-      .update({ assigned_to: currentUser })
+      .update({ assigned_to: currentUser, process_time: new Date().toISOString() })
       .eq("id", uid)
       .is("assigned_to", null);
 
@@ -2167,6 +2253,15 @@ async function loadHistory() {
   buildHistoryPagination();
 }
 
+function changeHistoryPageSize() {
+  const select = document.getElementById("history-per-page");
+  if (select) {
+    HISTORY_LIMIT = parseInt(select.value) || 10;
+    historyPage = 1;
+    loadHistory();
+  }
+}
+
 function buildHistoryPagination() {
   const totalPages = Math.ceil(historyTotal / HISTORY_LIMIT);
   const el = document.getElementById("history-pagination");
@@ -2352,9 +2447,9 @@ async function txValueExists(field, value) {
   return !!(data && data.length);
 }
 
-async function generateSmartTransactionUnique(maxTries = 25) {
+async function generateSmartTransactionUnique(pendingCount = 0, maxTries = 25) {
   for (let i = 0; i < maxTries; i++) {
-    const tx = generateSmartTransaction();
+    const tx = generateSmartTransaction(pendingCount);
     const normalizedName = (tx.account_name || "").replace(/\s+/g, " ").trim();
     tx.account_name = normalizedName;
 
@@ -2367,7 +2462,7 @@ async function generateSmartTransactionUnique(maxTries = 25) {
     if (!idExists && !numExists && !nameExists) return tx;
   }
 
-  const tx = generateSmartTransaction();
+  const tx = generateSmartTransaction(pendingCount);
   const safeSuffix = randomDigits(4);
   tx.account_name = `${(tx.account_name || "Client").replace(/\s+/g, " ").trim()} ${safeSuffix}`;
   tx.transaction_id =
@@ -2376,7 +2471,8 @@ async function generateSmartTransactionUnique(maxTries = 25) {
   return tx;
 }
 
-function generateSmartTransaction() {
+function generateSmartTransaction(pendingCount) {
+  pendingCount = pendingCount || 0;
   const firstNames = [
     "Nguyen",
     "Tran",
@@ -2554,13 +2650,40 @@ function generateSmartTransaction() {
 
   const created = new Date(lastTime);
 
-  const processDelay =
+  let processDelay =
     cfg.processDelay[0] +
     Math.random() * (cfg.processDelay[1] - cfg.processDelay[0]);
 
-  lastTime += processDelay;
+  // Jarak waktu pengerjaan (process_time) diatur berdasarkan jumlah nota pending (pendingCount)
+  if (pendingCount < 50) {
+    // Nota sedikit (0-49): waktu loncat 1 sampai 5 menit
+    processDelay += 60000 + Math.random() * 240000; 
+  } else if (pendingCount < 90) {
+    // Nota pertengahan (50-89): waktu loncat 1 sampai 3 menit
+    processDelay += 60000 + Math.random() * 120000;
+  } else if (pendingCount < 100) {
+    // Nota mulai padat (90-99): waktu loncat puluhan detik (20 - 50 detik)
+    processDelay += 20000 + Math.random() * 30000;
+  } else {
+    // Banjir nota (>= 100): proses cepat, hanya delay bawaan (cfg.processDelay) atau ditambah sangat sedikit
+    processDelay += Math.random() * 5000;
+  }
 
-  const process = new Date(lastTime);
+  let targetProcess = lastTime + processDelay;
+  
+  if (typeof lastProcessTime === 'undefined' || lastProcessTime < lastTime) {
+    lastProcessTime = lastTime;
+  }
+
+  // Ensure process_time is strictly sequential and ordered!
+  // If the random target is earlier than the previous transaction's process_time,
+  // we force it to be slightly after the previous one.
+  if (targetProcess <= lastProcessTime) {
+    targetProcess = lastProcessTime + 1000 + (Math.random() * 3000); // add 1-4 seconds sequentially
+  }
+  
+  lastProcessTime = targetProcess;
+  const process = new Date(targetProcess);
 
   const tx = {
     transaction_id:
@@ -2579,7 +2702,14 @@ function generateSmartTransaction() {
 }
 
 async function autoInsertTransaction() {
-  const tx = await generateSmartTransactionUnique();
+  const { count, error: countErr } = await sb
+    .from("transactions")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "Pending");
+    
+  const pendingCount = countErr ? 0 : (count || 0);
+
+  const tx = await generateSmartTransactionUnique(pendingCount);
 
   console.log("INSERT DATA:", tx);
 
@@ -3227,11 +3357,13 @@ async function reportTimeAnalysis() {
     failed: 0,
   }));
   data.forEach((t) => {
-    const d = new Date(t.created_at);
-    d.setHours(d.getHours() + 7);
-    byHour[d.getHours()].count++;
-    if (t.status === "Completed") byHour[d.getHours()].completed++;
-    if (t.status === "Failed") byHour[d.getHours()].failed++;
+    const safeIso = String(t.created_at).endsWith('Z') ? t.created_at : t.created_at + 'Z';
+    const d = new Date(safeIso);
+    // Ambil jam dalam timezone Jakarta
+    const jakartaHour = parseInt(d.toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', hour12: false }));
+    byHour[jakartaHour].count++;
+    if (t.status === "Completed") byHour[jakartaHour].completed++;
+    if (t.status === "Failed") byHour[jakartaHour].failed++;
   });
 
   const max = Math.max(...byHour.map((b) => b.count)) || 1;
@@ -3412,25 +3544,21 @@ function subscribeHistoryRealtime() {
 }
 
 async function loadDashboardStats() {
-  const { data, error } = await sb.from("transactions").select("status");
+  // Use parallel count queries — accurate even with >1000 rows
+  const [rTotal, rPending, rProcessing, rCompleted, rFailed] = await Promise.all([
+    sb.from("transactions").select("*", { count: "exact", head: true }),
+    sb.from("transactions").select("*", { count: "exact", head: true }).eq("status", "Pending"),
+    sb.from("transactions").select("*", { count: "exact", head: true }).eq("status", "Processing"),
+    sb.from("transactions").select("*", { count: "exact", head: true }).eq("status", "Completed"),
+    sb.from("transactions").select("*", { count: "exact", head: true }).eq("status", "Failed"),
+  ]);
 
-  if (error) {
-    console.error(error);
-    return;
-  }
+  if (rTotal.error) { console.error(rTotal.error); return; }
 
-  let total = data.length;
-  let pending = 0;
-  let completed = 0;
-  let failed = 0;
-
-  data.forEach((tx) => {
-    const s = (tx.status || "").toLowerCase().trim();
-
-    if (s === "pending" || s === "processing") pending++;
-    if (s === "completed") completed++;
-    if (s === "failed") failed++;
-  });
+  const total = rTotal.count || 0;
+  const pending = (rPending.count || 0) + (rProcessing.count || 0);
+  const completed = rCompleted.count || 0;
+  const failed = rFailed.count || 0;
 
   document.getElementById("stat-total-tx").textContent = total;
   document.getElementById("stat-pending-tx").textContent = pending;
@@ -3578,28 +3706,54 @@ setInterval(async () => {
 setInterval(systemAutoApproveTick, 5000);
 
 let _botLoopStarted = false;
+let _botLoopCount = 0;
 function startBotAutomationLoop() {
-  if (_botLoopStarted) return;
+  if (_botLoopStarted) {
+    console.log("🤖 Bot loop sudah berjalan, skip startBotAutomationLoop()");
+    return;
+  }
   _botLoopStarted = true;
+  _botLoopCount = 0;
+  console.log("🤖 ===== BOT AUTOMATION LOOP DIMULAI =====");
 
   async function loop() {
     // Bot hanya berjalan kalau status RUNNING di DB
-    // Siapa saja admin yang login bisa maintain loop
     if (!isBotRunning) {
       console.log("🤖 Bot tidak running, stop loop");
       _botLoopStarted = false;
       return;
     }
 
+    _botLoopCount++;
     const cfg = getTrafficConfig();
     const delay =
       cfg.insertDelay[0] +
       Math.random() * (cfg.insertDelay[1] - cfg.insertDelay[0]);
+
+    // Tunggu delay sesuai traffic config (jam ramai = cepat, jam sepi = lambat)
     await new Promise((r) => setTimeout(r, delay));
 
-    if (isBotRunning) {
+    if (!isBotRunning) {
+      console.log("🤖 Loop stopped setelah delay. Bot status:", isBotRunning);
+      _botLoopStarted = false;
+      return;
+    }
+
+    try {
+      console.log(`🤖 [Loop #${_botLoopCount}] Insert nota baru... (delay=${Math.round(delay)}ms)`);
       await autoInsertTransaction();
+    } catch (err) {
+      console.error("🤖 [Loop] autoInsertTransaction ERROR (loop tetap lanjut):", err);
+    }
+
+    try {
       await botProcessPendingTick();
+    } catch (err) {
+      console.error("🤖 [Loop] botProcessPendingTick ERROR (loop tetap lanjut):", err);
+    }
+
+    // Jadwalkan loop berikutnya — SELALU, meskipun ada error di atas
+    if (isBotRunning) {
       setTimeout(loop, delay);
     } else {
       console.log("🤖 Loop stopped. Bot status:", isBotRunning);

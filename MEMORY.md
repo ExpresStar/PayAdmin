@@ -16,10 +16,26 @@ PayAdmin adalah dashboard admin untuk mengelola transaksi pembayaran dengan fitu
 - **Execution**: PM2 24/7 with auto-restart
 - **Persistence**: `bot_states.json` tracks daily completion
 
-### ❌ DISABLED: RejectBot
-- **Reason**: Workers handle reject room manually (they upload screenshot + copy TX data)
+### ✅ ACTIVE: WorkerBot (NEW)
+- **Workers**: yaer98, xiaoting99, anan88 (nama sama dengan AbsensiBot)
+- **Shift schedule**:
+  - `xiaoting99` → Shift pagi  08:00–16:00 WIB
+  - `yaer98`     → Shift siang 12:00–20:00 WIB
+  - `anan88`     → Shift malam 20:00–04:00 WIB
+- **Mechanism**: Competitive claim via Supabase optimistic lock (`assigned_to IS NULL`)
+- **Oldest-first**: Ambil TX Pending tertua, random dari top-3 untuk variasi
+- **Human Slowdown**: 
+  - Jeda reaksi manusia 6–15 detik sebelum klaim (memberikan kesempatan bagi pekerja manusia untuk klaim duluan).
+  - Jeda check detail struk 4–9 detik.
+  - Jeda antar-loop 20–40 detik saat shift aktif, 90–150 detik saat off-shift.
+- **On mismatch**: screenshot canvas → teks TX ID→Bank → NB error → kirim ke room `reject`
+- **On match**: approve Completed langsung
+- **Jeda**: 20–40 detik/tick on-shift; 90–150 detik/tick off-shift
+- **Started**: `startWorkerBots()` dipanggil dari `doLogin()` in script.js
+
+### ❌ DISABLED: RejectBot (bot.js)
+- **Reason**: Digantikan oleh WorkerBot di atas (in-browser, lebih lengkap)
 - **Status**: `const REJECT_BOTS = [...]` commented out in bot.js
-- **Alternative**: Manual workflow in chat image upload feature
 
 ### 🚫 SILENT: Worker Room
 - **Bot Access**: BLOCKED (guard in `insertMsg()` function)
@@ -89,6 +105,19 @@ MAKAN_DURATION_MS = 30 * 60 * 1000;
    - No message editing/deletion (immutable logs)
    - Sidebar preview limited to last message + time
 
+## Admin Panel Status (Week 1 MVP) ✅ BUILT
+
+### Files Created
+- admin-login.html (2FA: Email + TOTP)
+- admin.html (899 lines: 7 pages + 2 modals + JS)
+- Database tables: admin_users, workers, bot_instances
+
+### Credentials (KEEP SAFE!)
+```
+baobei908@933pay.local : bobi908
+operator908@933pay.local : bobi908
+```
+
 ## Deployment Checklist
 
 - [x] AbsensiBot configured + tested
@@ -97,9 +126,11 @@ MAKAN_DURATION_MS = 30 * 60 * 1000;
 - [x] PM2 auto-restart configured
 - [x] Production timing reverted (WORK_START_HOUR=8)
 - [x] Commits pushed
-- [ ] QA: Test full shift cycle (08:00-18:00)
-- [ ] QA: Verify reject room manual workflow (xiaoting uploads evidence)
-- [ ] QA: Confirm worker room remains bot-free
+- [x] Admin panel built (899 lines)
+- [x] Database tables created + credentials set
+- [ ] QA: Test admin login flow
+- [ ] QA: Test worker management
+- [ ] QA: Test bot operations
 
 ## Next Steps
 
@@ -110,6 +141,6 @@ MAKAN_DURATION_MS = 30 * 60 * 1000;
 
 ---
 
-**Last Updated**: 2026-07-06 16:40 WIB
+**Last Updated**: 2026-07-06 17:52 WIB
 **System Status**: ✅ PRODUCTION READY
-**Commits**: `119c889` (bot.js: disable RejectBot, revert production timing)
+**Commits**: Worker Bot system activated — shift-aware, competitive claim, reject reporter

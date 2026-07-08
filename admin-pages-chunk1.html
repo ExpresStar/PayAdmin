@@ -1,0 +1,223 @@
+
+      <!-- PAGE: DASHBOARD -->
+      <div id="dashboard" class="page active">
+        <div class="page-header">
+          <h1>📊 仪表板</h1>
+          <p>系统概览和关键指标</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="statWorkers">0</div>
+            <div class="stat-label">活跃员工</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statBots">0</div>
+            <div class="stat-label">运行中的机器人</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statTxToday">0</div>
+            <div class="stat-label">今日交易</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statUptime">99.8%</div>
+            <div class="stat-label">系统正常运行时间</div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="card">
+            <h3>📈 最近活动</h3>
+            <div class="activity-list">
+              <div class="activity-item">
+                <span class="time">刚刚</span>
+                <span>baobei908 批准了班次交换</span>
+              </div>
+              <div class="activity-item">
+                <span class="time">5分钟前</span>
+                <span>WorkerBot 处理了 3 笔交易</span>
+              </div>
+              <div class="activity-item">
+                <span class="time">15分钟前</span>
+                <span>员工 xiaoting99 签到</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>🚨 系统状态</h3>
+            <div class="status-list">
+              <div class="status-item">
+                <span>数据库连接</span>
+                <span class="badge badge-success">✓ 正常</span>
+              </div>
+              <div class="status-item">
+                <span>Bot 服务</span>
+                <span class="badge badge-success">✓ 正常</span>
+              </div>
+              <div class="status-item">
+                <span>Ollama AI</span>
+                <span class="badge badge-success">✓ 正常</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAGE: WORKERS -->
+      <div id="workers" class="page">
+        <div class="page-header">
+          <h1>👥 员工管理</h1>
+          <button class="btn" onclick="openAddWorkerModal()">+ 添加员工</button>
+        </div>
+
+        <div id="workerAlert" class="alert"></div>
+
+        <div class="card">
+          <div class="filter-bar">
+            <input type="text" placeholder="搜索员工名称或ID..." id="workerSearch" />
+            <select id="workerStatusFilter">
+              <option value="">全部状态</option>
+              <option value="active">活跃</option>
+              <option value="inactive">停用</option>
+            </select>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>员工名称</th>
+                <th>用户ID</th>
+                <th>班次</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="workersTable">
+              <tr><td colspan="5" style="text-align:center;color:#999;">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: BOTS -->
+      <div id="bots" class="page">
+        <div class="page-header">
+          <h1>🤖 机器人管理</h1>
+          <span style="color:#666;font-size:14px;">自动处理交易和考勤</span>
+        </div>
+
+        <div id="botAlert" class="alert"></div>
+
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th>员工</th>
+                <th>机器人类型</th>
+                <th>状态</th>
+                <th>最后心跳</th>
+                <th>错误次数</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="botsTable">
+              <tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: TRANSACTIONS -->
+      <div id="transactions" class="page">
+        <div class="page-header">
+          <h1>💳 交易管理</h1>
+          <span style="color:#666;font-size:14px;">查看和管理所有支付交易</span>
+        </div>
+
+        <div class="card">
+          <div class="filter-bar">
+            <input type="text" placeholder="搜索交易ID..." id="txFilter" />
+            <select id="txStatusFilter">
+              <option value="">全部状态</option>
+              <option value="Pending">待处理</option>
+              <option value="Completed">已完成</option>
+              <option value="Rejected">已拒绝</option>
+            </select>
+            <button class="btn" onclick="filterTransactions()">搜索</button>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>交易ID</th>
+                <th>金额</th>
+                <th>账号</th>
+                <th>状态</th>
+                <th>时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="transactionsTable">
+              <tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: CHAT -->
+      <div id="chat" class="page">
+        <div class="page-header">
+          <h1>💬 聊天管理</h1>
+          <span style="color:#666;font-size:14px;">管理考勤、拒绝和员工房间</span>
+        </div>
+
+        <div class="card">
+          <div style="padding: 20px; text-align: center; color: #999;">
+            <p>聊天管理功能开发中...</p>
+            <p style="font-size: 12px;">Week 2 功能</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAGE: SHIFTS -->
+      <div id="shifts" class="page">
+        <div class="page-header">
+          <h1>📅 班次交换</h1>
+          <button class="btn" onclick="openShiftSwapModal()">+ 新建申请</button>
+        </div>
+
+        <div id="shiftAlert" class="alert"></div>
+
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th>申请者</th>
+                <th>接收者</th>
+                <th>交换日期</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="shiftSwapsTable">
+              <tr><td colspan="5" style="text-align:center;color:#999;">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: SETTINGS -->
+      <div id="settings" class="page">
+        <div class="page-header">
+          <h1>⚙️ 系统设置</h1>
+          <span style="color:#666;font-size:14px;">配置系统参数和功能</span>
+        </div>
+
+        <div class="card">
+          <div style="padding: 20px; text-align: center; color: #999;">
+            <p>系统设置开发中...</p>
+            <p style="font-size: 12px;">Week 2 功能</p>
+          </div>
+        </div>
+      </div>

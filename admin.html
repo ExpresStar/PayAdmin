@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>933Pay - Admin Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;background:#f4f6fb;color:#222}
+    .app{display:flex;min-height:100vh}
+    .side{width:250px;background:#111827;color:#fff;padding:22px;position:fixed;height:100vh}
+    .brand{font-size:24px;font-weight:700;margin-bottom:6px}
+    .sub{font-size:12px;color:#9ca3af;margin-bottom:24px}
+    .nav button{display:block;width:100%;padding:12px;margin:6px 0;border:0;border-radius:8px;background:transparent;color:#d1d5db;text-align:left;cursor:pointer;font-size:15px}
+    .nav button.active,.nav button:hover{background:#2563eb;color:#fff}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .user{position:absolute;bottom:22px;left:22px;right:22px;font-size:13px;color:#d1d5db}
+    .logout{margin-top:10px;background:#ef4444!important;color:#fff!important;text-align:center!important}
+    .main{margin-left:250px;padding:24px;width:calc(100% - 250px)}
+    .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+    .top h1{font-size:28px}
+    .btn{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font-weight:600}
+    .btn.red{background:#dc2626}
+    .btn.green{background:#16a34a}
+    .btn.gray{background:#6b7280}
+    .btn.small{padding:6px 10px;font-size:12px}
+    .btn.gold{background:#d97706;color:#fff}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+    .card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:16px}
+    .stat{font-size:34px;font-weight:700;color:#2563eb}
+    .stat.green{color:#16a34a}
+    .stat.red{color:#dc2626}
+    .stat.gold{color:#d97706}
+    .label{color:#6b7280;margin-top:6px;font-size:14px}
+    .page{display:none}
+    .page.active{display:block}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden}
+    th,td{padding:12px;border-bottom:1px solid #e5e7eb;text-align:left;font-size:14px}
+    th{background:#f9fafb;color:#374151}
+    .badge{padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700}
+    .ok{background:#dcfce7;color:#166534}
+    .bad{background:#fee2e2;color:#991b1b}
+    .warn{background:#fef3c7;color:#92400e}
+    .blue{background:#dbeafe;color:#1e40af}
+    .toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+    input,select,textarea{padding:10px;border:1px solid #d1d5db;border-radius:8px;min-width:180px;font-size:14px}
+    input:focus,select:focus{border-color:#2563eb;outline:none}
+    .alert{display:none;margin-bottom:12px;padding:12px;border-radius:8px}
+    .alert.show{display:block}
+    .success{background:#dcfce7;color:#166534}
+    .error{background:#fee2e2;color:#991b1b}
+    .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center;z-index:50}
+    .modal.show{display:flex}
+    .modalbox{background:#fff;border-radius:12px;width:95%;max-width:460px;padding:20px;max-height:90vh;overflow-y:auto}
+    .modalbox h2{margin-bottom:14px}
+    .form{display:grid;gap:12px}
+    .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+    .muted{color:#6b7280}
+    .center{text-align:center;padding:30px;color:#6b7280}
+    .chat-rooms{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+    .chat-room{background:#fff;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.06);overflow:hidden}
+    .chat-room h3{padding:14px 18px;border-bottom:1px solid #e5e7eb;margin:0;font-size:16px}
+    .chat-room .msgs{max-height:400px;overflow-y:auto;padding:10px 18px}
+    .chat-msg{padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:13px}
+    .chat-msg:last-child{border:none}
+    .chat-msg .user_name{font-weight:700;color:#2563eb;display:inline}
+    .chat-msg .time{color:#9ca3af;font-size:11px;margin-left:8px}
+    .chat-msg .text{color:#374151;margin-top:3px;word-break:break-word}
+    .chat-msg .img{max-width:200px;margin-top:6px;border-radius:6px;cursor:pointer}
+    .badge-live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse 1.5s infinite;margin-right:6px}
+    @keyframes pulse{0%{opacity:1}50%{opacity:.4}100%{opacity:1}}
+    .ai-panel{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+    .ai-panel textarea{width:100%;min-height:120px;font-family:monospace;font-size:13px}
+    .culture-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+    .culture-card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.06);border-left:4px solid #2563eb}
+    .culture-card.highlight{border-left-color:#d97706}
+    .culture-card .date{font-size:12px;color:#6b7280}
+    .culture-card h3{margin:4px 0 6px;font-size:17px}
+    .culture-card .desc{font-size:13px;color:#4b5563;line-height:1.5}
+    .culture-card .countdown{display:inline-block;background:#2563eb;color:#fff;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600}
+    .culture-card .countdown.today{background:#d97706}
+    .culture-card .countdown.past{background:#6b7280}
+    .cul-badge{display:inline-block;background:#fef3c7;color:#92400e;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600}
+    .ai-output{background:#111827;color:#e2e8f0;border-radius:8px;padding:14px;font-family:monospace;font-size:13px;min-height:200px;white-space:pre-wrap;overflow-y:auto;max-height:400px}
+    .tx-detail{font-size:14px;line-height:1.8}
+    .tx-detail th{width:140px;color:#6b7280;font-weight:400;vertical-align:top;padding:6px 12px}
+    .tx-detail td{padding:6px 12px}
+    .tx-detail table{box-shadow:none;border-radius:0}
+    @media(max-width:800px){
+      .side{position:static;width:100%;height:auto}
+      .app{display:block}
+      .main{margin-left:0;width:100%}
+      .user{position:static;margin-top:20px}
+      .chat-rooms{grid-template-columns:1fr}
+      .ai-panel{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">933Pay Admin</div>
+      <div class="sub">Dashboard operasional</div>
+      <div class="nav">
+        <button class="active" onclick="showPage('dashboard',this)">Dashboard</button>
+        <button onclick="showPage('workers',this)">Worker</button>
+        <button onclick="showPage('bots',this)">Bot</button>
+        <button onclick="showPage('transactions',this)">Transaksi</button>
+        <button onclick="showPage('chat',this)">Chat</button>
+        <button onclick="showPage('ai',this)">AI Analisis</button>
+        <button onclick="showPage('culture',this)">Budaya</button>
+        <button onclick="showPage('shifts',this)">Tukar Shift</button>
+        <button onclick="showPage('settings',this)">Pengaturan</button>
+      </div>
+      <div class="user">
+        <div id="userEmail">admin</div>
+        <button class="nav logout" onclick="logout()">Keluar</button>
+      </div>
+    </aside>
+    <main class="main">
+
+      <!-- DASHBOARD -->
+      <section id="dashboard" class="page active">
+        <div class="top">
+          <div><h1>Dashboard</h1><p class="muted">Ringkasan sistem 933Pay <span id="liveStamp">Live</span></p></div>
+          <button class="btn" onclick="loadAll()">Refresh</button>
+        </div>
+        <div class="grid">
+          <div class="card"><div class="stat" id="statWorkers">0</div><div class="label">Worker Aktif</div></div>
+          <div class="card"><div class="stat" id="statBots">0</div><div class="label">Bot Running</div></div>
+          <div class="card"><div class="stat gold" id="statPending">0</div><div class="label">Transaksi Pending</div></div>
+          <div class="card"><div class="stat green" id="statToday">0</div><div class="label">Selesai Hari Ini</div></div>
+        </div>
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div class="card">
+            <h3>Status Sistem</h3><br>
+            <p>Database: <b style="color:#16a34a">Normal</b></p>
+            <p>Bot Service: <b style="color:#16a34a">Normal</b></p>
+            <p>Ollama AI: <b id="aiStatus" style="color:#16a34a">Normal</b></p>
+            <p>Realtime: <b id="rtStatus" style="color:#16a34a">Connected</b></p>
+          </div>
+          <div class="card">
+            <h3>Aktivitas Terkini</h3><br>
+            <div id="recentActivity" style="font-size:13px;color:#6b7280">Data realtime aktif.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKERS -->
+      <section id="workers" class="page">
+        <div class="top"><h1>Manajemen Worker</h1><button class="btn" onclick="openWorkerModal()">+ Tambah Worker</button></div>
+        <div id="workerAlert" class="alert"></div>
+        <div class="card"><table><thead><tr><th>Nama</th><th>User ID</th><th>Shift</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="workersTable"></tbody></table></div>
+      </section>
+
+      <!-- BOTS -->
+      <section id="bots" class="page">
+        <div class="top"><h1>Manajemen Bot</h1><button class="btn" onclick="loadBots()">Refresh</button></div>
+        <div id="botAlert" class="alert"></div>
+        <div class="card"><table><thead><tr><th>Worker</th><th>Tipe</th><th>Status</th><th>Heartbeat</th><th>Error</th><th>Aksi</th></tr></thead><tbody id="botsTable"></tbody></table></div>
+      </section>
+
+      <!-- TRANSACTIONS -->
+      <section id="transactions" class="page">
+        <div class="top"><h1>Transaksi</h1><button class="btn" onclick="loadTransactions()">Refresh</button></div>
+        <div class="toolbar">
+          <input id="txFilter" placeholder="Cari TX ID / Order ID">
+          <select id="txStatusFilter"><option value="">Semua Status</option><option>Pending</option><option>Completed</option><option>Failed</option></select>
+          <button class="btn" onclick="txCurrentPage=1;loadTransactions()">Cari</button>
+          <button class="btn gold" onclick="forceUnlockTx()">🔓 Unlock Nota Nyangkut</button>
+          <span style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:13px;color:#6b7280">
+            Tampilkan
+            <select id="txPerPage" onchange="txCurrentPage=1;loadTransactions()" style="min-width:70px;padding:6px 8px">
+              <option value="10">10</option>
+              <option value="30" selected>30</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            per halaman
+          </span>
+        </div>
+        <div class="card">
+          <table><thead><tr><th>TX ID</th><th>Order ID</th><th>Nominal</th><th>Akun</th><th>Bank</th><th>Status</th><th>Waktu</th></tr></thead><tbody id="transactionsTable"></tbody></table>
+          <div id="txPagination" style="display:flex;justify-content:space-between;align-items:center;padding:12px 8px 4px;font-size:13px">
+            <span id="txPageInfo" style="color:#6b7280"></span>
+            <div style="display:flex;gap:6px">
+              <button id="txPrevBtn" class="btn gray small" onclick="prevTxPage()" style="display:none">‹ Sebelumnya</button>
+              <button id="txNextBtn" class="btn gray small" onclick="nextTxPage()">Berikutnya ›</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAT -->
+      <section id="chat" class="page">
+        <div class="top"><h1>Chat Room</h1><button class="btn" onclick="loadChats()">Refresh</button></div>
+        <div class="chat-rooms" id="chatRooms"></div>
+      </section>
+
+      <!-- AI ANALISIS -->
+      <section id="ai" class="page">
+        <div class="top"><h1>AI Analisis</h1></div>
+        <div class="ai-panel">
+          <div class="card">
+            <h3>Input</h3><br>
+            <textarea id="aiInput" placeholder="Masukkan data transaksi atau pertanyaan analisis..."></textarea><br>
+            <div class="row" style="margin-top:10px">
+              <button class="btn" onclick="runAIAnalysis()">Analisis</button>
+              <button class="btn gray small" onclick="genAISummary()">Summary Harian</button>
+              <button class="btn gray small" onclick="genAIInsight()">Insight</button>
+              <span style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:13px;color:#6b7280">
+                Riwayat
+                <select id="aiPerPage" onchange="genAISummary()" style="min-width:70px;padding:6px 8px">
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="200" selected>200</option>
+                  <option value="500">500</option>
+                </select>
+                data terakhir
+              </span>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Output</h3><br>
+            <div id="aiOutput" class="ai-output">Klik tombol analisis untuk memulai...</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Statistik Cepat</h3><br>
+          <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+            <div><div class="stat" style="font-size:24px" id="aiStatPending">0</div><div class="label">Pending</div></div>
+            <div><div class="stat green" style="font-size:24px" id="aiStatCompleted">0</div><div class="label">Completed</div></div>
+            <div><div class="stat red" style="font-size:24px" id="aiStatFailed">0</div><div class="label">Failed</div></div>
+            <div><div class="stat gold" style="font-size:24px" id="aiStatTotal">0</div><div class="label">Total Hari Ini</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BUDAYA VIETNAM -->
+      <section id="culture" class="page">
+        <div class="top"><h1>Budaya Vietnam</h1><div class="row"><button class="btn green" onclick="runCulturalFlood()">Gen Banjir</button><button class="btn" onclick="loadCulture()">Refresh</button></div></div>
+        <div id="cultureAlert" class="alert"></div>
+
+        <div class="card">
+          <h3>Kalender Budaya 🇻🇳</h3><br>
+          <div id="cultureCalendar" class="culture-grid">Memuat...</div>
+        </div>
+
+        <div class="card">
+          <h3>Generate Nota Bertema</h3><br>
+          <div class="row">
+            <select id="cultureEventSelect" style="padding:10px;border-radius:8px;border:1px solid #d1d5db;flex:1"></select>
+            <input id="cultureNoteCount" type="number" value="10" min="1" max="100" style="width:80px;padding:10px;border-radius:8px;border:1px solid #d1d5db" placeholder="Jumlah">
+            <button class="btn" onclick="generateCulturalNotes()">Generate</button>
+          </div>
+          <div id="cultureGenResult" style="margin-top:12px;font-size:13px;color:#6b7280"></div>
+        </div>
+
+        <div class="card">
+          <h3>Analisis Budaya via AI</h3><br>
+          <textarea id="culturePrompt" placeholder="Tanya tentang budaya Vietnam atau minta analisis..." style="width:100%;min-height:100px;font-family:monospace;font-size:13px;padding:10px;border-radius:8px;border:1px solid #d1d5db"></textarea><br>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" onclick="runCulturalAnalysis()">Analisis via Ollama</button>
+            <button class="btn gray small" onclick="suggestEventNotes()">Saran Nota untuk Event</button>
+          </div>
+          <div id="cultureOutput" class="ai-output" style="margin-top:12px">Klik analisis untuk memulai...</div>
+        </div>
+      </section>
+
+      <!-- SHIFTS -->
+      <section id="shifts" class="page">
+        <div class="top"><h1>Tukar Shift</h1><button class="btn" onclick="openShiftModal()">+ Request Tukar Shift</button></div>
+        <div id="shiftAlert" class="alert"></div>
+        <div class="card"><table><thead><tr><th>Dari</th><th>Ke</th><th>Tanggal</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="shiftTable"></tbody></table></div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="settings" class="page">
+        <div class="top"><h1>Pengaturan</h1></div>
+        <div class="card center">Pengaturan lanjutan masuk Week 2.</div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODALS -->
+  <div class="modal" id="workerModal"><div class="modalbox"><h2>Tambah Worker</h2><div class="form"><input id="workerName" placeholder="Nama worker"><input id="workerUserId" placeholder="User ID"><select id="workerShift"><option value="pagi">Pagi (08:00-20:00)</option><option value="malam">Malam (20:00-08:00)</option></select></div><div class="actions"><button class="btn gray" onclick="closeModals()">Batal</button><button class="btn" onclick="addWorker()">Simpan</button></div></div></div>
+  <div class="modal" id="txModal"><div class="modalbox" style="max-width:560px"><h2 id="txModalTitle">Detail Transaksi</h2><div id="txDetailBody" class="tx-detail">Memuat...</div><div class="actions"><button class="btn gray" onclick="closeModals()">Tutup</button></div></div></div>
+  <div class="modal" id="shiftModal"><div class="modalbox"><h2>Request Tukar Shift</h2><div class="form"><select id="swapFrom"></select><select id="swapTo"></select><input id="swapDate" type="date"><textarea id="swapNotes" placeholder="Catatan"></textarea></div><div class="actions"><button class="btn gray" onclick="closeModals()">Batal</button><button class="btn" onclick="addShiftSwap()">Submit</button></div></div></div>
+
+  <script>
+    const SUPABASE_URL="https://mfuqwfpnzylosqfmmuic.supabase.co";
+    const SUPABASE_KEY="sb_publishable_pkZOPM-0BRpiLyMdHn8UJA_K4kI8hnx";
+    const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+    const email=sessionStorage.getItem('_admin_email')||'admin@933pay.local';
+    if(sessionStorage.getItem('adminLoggedIn')!=='true') location.href='/admin-login.html';
+    document.getElementById('userEmail').textContent=email;
+
+    function badge(v){
+      let c=v==='running'||v==='active'||v==='Completed'||v==='approved'?'ok':
+             v==='Pending'||v==='pending'?'warn':
+             v==='Failed'||v==='failed'?'bad':'blue';
+      return '<span class="badge '+c+'">'+(v||'-')+'</span>';
+    }
+    function fmt(t){return t?new Date(t).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'}):'-'}
+    function fmtShort(t){return t?new Date(t).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',dateStyle:'short',timeStyle:'short'}):'-'}
+    function money(n){return Number(n||0).toLocaleString('vi-VN')+' VND'}
+    function shiftLabel(s){return {pagi:'Pagi (08-20)',malam:'Malam (20-08)'}[s]||s}
+    function alertBox(id,msg,type){var e=document.getElementById(id);e.className='alert show '+(type||'success');e.textContent=msg;setTimeout(function(){e.className='alert'},3500)}
+    function closeModals(){document.querySelectorAll('.modal').forEach(function(m){m.classList.remove('show')})}
+
+    function showPage(id,btn){
+      document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
+      document.getElementById(id).classList.add('active');
+      document.querySelectorAll('.nav button').forEach(function(b){b.classList.remove('active')});
+      if(btn)btn.classList.add('active');
+      if(id==='workers')loadWorkers();
+      if(id==='bots')loadBots();
+      if(id==='transactions')loadTransactions();
+      if(id==='chat')loadChats();
+      if(id==='shifts')loadShiftSwaps();
+      if(id==='ai')loadAIStats();
+      if(id==='culture')loadCulture();
+    }
+    function logout(){sessionStorage.clear();location.href='/admin-login.html'}
+
+    async function loadAll(){
+      await Promise.all([loadDashboard(),loadWorkers(),loadBots(),loadTransactions(),loadChats(),loadShiftSwaps()])
+    }
+
+    // REALTIME SUBSCRIPTIONS
+    var channel;
+
+    function initRealtime(){
+      channel = sb.channel('admin-live')
+        .on('postgres_changes',{event:'*',schema:'public',table:'transactions'},function(){
+          loadDashboard();
+          var active=document.querySelector('.page.active');
+          if(active&&active.id==='transactions')loadTransactions();
+          if(active&&active.id==='ai')loadAIStats();
+        })
+        .on('postgres_changes',{event:'*',schema:'public',table:'workers'},function(){
+          loadDashboard();
+          if(document.getElementById('workers').classList.contains('active'))loadWorkers();
+        })
+        .on('postgres_changes',{event:'*',schema:'public',table:'bot_instances'},function(){
+          if(document.getElementById('bots').classList.contains('active'))loadBots();
+        })
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},function(){
+          if(document.getElementById('chat').classList.contains('active'))loadChats();
+        })
+        .subscribe(function(status){
+          var el=document.getElementById('rtStatus');
+          if(status==='SUBSCRIBED'){el.innerHTML='Connected';el.style.color='#16a34a'}
+          else{el.innerHTML='Disconnected';el.style.color='#dc2626'}
+        });
+    }
+
+    // AUTO POLLING FALLBACK
+    var dashInterval;
+    function startPolling(){
+      if(dashInterval)clearInterval(dashInterval);
+      dashInterval=setInterval(function(){loadDashboard()},8000);
+    }
+
+    // DASHBOARD
+    async function loadDashboard(){
+      try{
+        var results=await Promise.all([
+          sb.from('workers').select('*',{count:'exact',head:true}).eq('status','active'),
+          sb.from('bot_instances').select('*',{count:'exact',head:true}).eq('status','running'),
+          sb.from('transactions').select('*',{count:'exact',head:true}).eq('status','Pending'),
+          sb.from('transactions').select('*',{count:'exact',head:true}).eq('status','Completed'),
+        ]);
+        document.getElementById('statWorkers').textContent=results[0].count||0;
+        document.getElementById('statBots').textContent=results[1].count||0;
+        document.getElementById('statPending').textContent=results[2].count||0;
+        document.getElementById('statToday').textContent=results[3].count||0;
+        document.getElementById('liveStamp').textContent='Live '+new Date().toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta'});
+      }catch(e){console.error(e)}
+    }
+
+    // WORKERS
+    async function loadWorkers(){
+      var res=await sb.from('workers').select('*').order('created_at',{ascending:false});
+      var tb=document.getElementById('workersTable');
+      if(res.error){tb.innerHTML='<tr><td colspan="5">Error: '+res.error.message+'</td></tr>';return}
+      if(!res.data||res.data.length===0){tb.innerHTML='<tr><td colspan="5">Belum ada data.</td></tr>';return}
+      tb.innerHTML=res.data.map(function(w){
+        return '<tr><td>'+w.name+'</td><td><code>'+w.user_id+'</code></td><td>'+shiftLabel(w.shift)+'</td><td>'+badge(w.status)+'</td><td><button class="btn red small" onclick="deleteWorker(\''+w.id+'\')">Hapus</button> <button class="btn gray small" onclick="toggleWorkerStatus(\''+w.id+'\',\''+w.status+'\')">'+(w.status==='active'?'Nonaktifkan':'Aktifkan')+'</button></td></tr>'
+      }).join('');
+    }
+    function openWorkerModal(){document.getElementById('workerModal').classList.add('show')}
+    async function addWorker(){
+      var name=document.getElementById('workerName').value.trim();
+      var user_id=document.getElementById('workerUserId').value.trim();
+      var shift=document.getElementById('workerShift').value;
+      if(!name||!user_id)return alertBox('workerAlert','Nama dan User ID wajib diisi','error');
+      var res=await sb.from('workers').insert({name:name,user_id:user_id,shift:shift,status:'active'}).select().single();
+      closeModals();
+      document.getElementById('workerName').value='';document.getElementById('workerUserId').value='';
+      if(res.error)return alertBox('workerAlert',res.error.message,'error');
+      // Auto-create bot_instances record
+      var workerId=res.data.id;
+      await sb.from('bot_instances').insert({
+        worker_id:workerId,
+        bot_type:'worker',
+        status:'running',
+        last_started:new Date().toISOString()
+      });
+      alertBox('workerAlert','Worker + Bot berhasil ditambah');
+      loadWorkers();loadBots();loadDashboard();
+    }
+    async function deleteWorker(id){
+      if(!confirm('Hapus worker ini?'))return;
+      var res=await sb.from('workers').delete().eq('id',id);
+      if(res.error)return alertBox('workerAlert',res.error.message,'error');
+      alertBox('workerAlert','Worker dihapus');loadWorkers();
+    }
+    async function toggleWorkerStatus(id,status){
+      var next=status==='active'?'inactive':'active';
+      await sb.from('workers').update({status:next}).eq('id',id);
+      alertBox('workerAlert','Status worker diubah');loadWorkers();
+    }
+
+    // BOTS
+    async function loadBots(){
+      var res=await sb.from('bot_instances').select('*,workers:worker_id(name,user_id)').order('created_at',{ascending:false});
+      var tb=document.getElementById('botsTable');
+      if(res.error){tb.innerHTML='<tr><td colspan="6">Error: '+res.error.message+'</td></tr>';return}
+      if(!res.data||res.data.length===0){tb.innerHTML='<tr><td colspan="6">Belum ada data.</td></tr>';return}
+      tb.innerHTML=res.data.map(function(b){
+        return '<tr><td>'+(b.workers?b.workers.name:'-')+'<br><code style="font-size:11px">'+(b.workers?b.workers.user_id:'-')+'</code></td><td>'+b.bot_type+'</td><td>'+badge(b.status)+'</td><td>'+(b.last_heartbeat?fmtShort(b.last_heartbeat):'-')+'</td><td>'+(b.error_count||0)+'</td><td><button class="btn small '+(b.status==='running'?'red':'green')+'" onclick="toggleBot(\''+b.id+'\',\''+b.status+'\')">'+(b.status==='running'?'Stop':'Start')+'</button> <button class="btn gray small" onclick="restartBot(\''+b.id+'\')">Restart</button></td></tr>'
+      }).join('');
+    }
+    async function toggleBot(id,status){
+      var next=status==='running'?'stopped':'running';
+      var update={status:next};
+      if(next==='running')update.last_started=new Date().toISOString();
+      if(next==='stopped')update.last_stopped=new Date().toISOString();
+      var res=await sb.from('bot_instances').update(update).eq('id',id);
+      if(res.error)return alertBox('botAlert',res.error.message,'error');
+      alertBox('botAlert','Status bot diubah');loadBots();
+    }
+    async function restartBot(id){
+      await sb.from('bot_instances').update({last_started:new Date().toISOString(),error_count:0,status:'running'}).eq('id',id);
+      alertBox('botAlert','Bot direstart');loadBots();
+    }
+
+    // TRANSACTIONS — Paginated
+    var txCurrentPage=1;
+    var txTotalCount=0;
+
+    async function forceUnlockTx() {
+      const txId = prompt("Masukkan Transaction ID yang nyangkut (misal: TX...):");
+      if (!txId) return;
+      const tid = txId.trim();
+
+      const { data, error: fetchErr } = await sb
+        .from("transactions")
+        .select("id, status, assigned_to")
+        .ilike("transaction_id", tid + "%")
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchErr || !data) {
+        alert("Transaction ID tidak ditemukan!");
+        return;
+      }
+      
+      if (data.status !== "Pending") {
+        alert("Nota ini statusnya sudah " + data.status + ", tidak perlu di-unlock.");
+        return;
+      }
+
+      if (!data.assigned_to) {
+        alert("Nota ini sedang tidak dikunci oleh siapa-siapa.");
+        return;
+      }
+
+      const { error } = await sb
+        .from("transactions")
+        .update({ assigned_to: null, process_time: null })
+        .eq("id", data.id);
+        
+      if (error) {
+        alert("Gagal membuka kuncian: " + error.message);
+      } else {
+        alert("Berhasil membuka kuncian nota " + tid + "!");
+        loadTransactions();
+      }
+    }
+
+    async function loadTransactions(){
+      var perPage=parseInt(document.getElementById('txPerPage').value)||30;
+      var tx=document.getElementById('txFilter').value.trim();
+      var st=document.getElementById('txStatusFilter').value;
+
+      // Count total matching records
+      var countQuery=sb.from('transactions').select('*',{count:'exact',head:true});
+      if(tx)countQuery=countQuery.or('transaction_id.ilike.%'+tx+'%,order_id.ilike.%'+tx+'%');
+      if(st)countQuery=countQuery.eq('status',st);
+      var countRes=await countQuery;
+      txTotalCount=countRes.count||0;
+
+      // Fetch page
+      var from=(txCurrentPage-1)*perPage;
+      var to=from+perPage-1;
+      var q=sb.from('transactions').select('*').order('created_at',{ascending:false}).range(from,to);
+      if(tx)q=q.or('transaction_id.ilike.%'+tx+'%,order_id.ilike.%'+tx+'%');
+      if(st)q=q.eq('status',st);
+      var res=await q;
+
+      var tb=document.getElementById('transactionsTable');
+      if(res.error){tb.innerHTML='<tr><td colspan="7">Error: '+res.error.message+'</td></tr>';return}
+      if(!res.data||res.data.length===0){
+        tb.innerHTML='<tr><td colspan="7">Belum ada data.</td></tr>';
+        document.getElementById('txPageInfo').textContent='';
+        document.getElementById('txPrevBtn').style.display='none';
+        document.getElementById('txNextBtn').style.display='none';
+        return
+      }
+      tb.innerHTML=res.data.map(function(t){
+        return '<tr style="cursor:pointer" ondblclick="showTxDetail(\''+t.id+'\')"><td><code>'+(t.transaction_id||'').slice(0,16)+'</code></td><td><code style="font-size:11px">'+(t.order_id||'').slice(0,10)+'</code></td><td>'+money(t.amount)+'</td><td>'+(t.account_number||t.account_name||'-')+'</td><td>'+(t.bank_name||'-')+'</td><td>'+badge(t.status)+'</td><td style="font-size:11px">'+fmtShort(t.created_at)+'</td></tr>'
+      }).join('');
+
+      updateTxPagination();
+    }
+
+    function updateTxPagination(){
+      var perPage=parseInt(document.getElementById('txPerPage').value)||30;
+      var totalPages=Math.ceil(txTotalCount/perPage)||1;
+      document.getElementById('txPageInfo').textContent='Halaman '+txCurrentPage+' dari '+totalPages+' ('+txTotalCount+' data)';
+      document.getElementById('txPrevBtn').style.display=txCurrentPage>1?'inline-block':'none';
+      document.getElementById('txNextBtn').style.display=txCurrentPage<totalPages?'inline-block':'none';
+    }
+
+    function prevTxPage(){
+      if(txCurrentPage>1){txCurrentPage--;loadTransactions()}
+    }
+    function nextTxPage(){
+      var perPage=parseInt(document.getElementById('txPerPage').value)||30;
+      var totalPages=Math.ceil(txTotalCount/perPage)||1;
+      if(txCurrentPage<totalPages){txCurrentPage++;loadTransactions()}
+    }
+    async function showTxDetail(id){
+      var res=await sb.from('transactions').select('*').eq('id',id).single();
+      if(!res.data)return;
+      var h=res.data;
+      document.getElementById('txModalTitle').textContent='Detail Transaksi';
+      document.getElementById('txDetailBody').innerHTML='<table><tr><th>TX ID</th><td><code>'+(h.transaction_id||'-')+'</code></td></tr><tr><th>Order ID</th><td><code>'+(h.order_id||'-')+'</code></td></tr><tr><th>Akun</th><td>'+(h.account_number||'-')+'</td></tr><tr><th>Nama</th><td>'+(h.account_name||'-')+'</td></tr><tr><th>Bank</th><td>'+(h.bank_name||'-')+'</td></tr><tr><th>Nominal</th><td style="font-weight:700;color:#2563eb">'+money(h.amount)+'</td></tr><tr><th>Status</th><td>'+badge(h.status)+'</td></tr><tr><th>Assigned</th><td><code>'+(h.assigned_to||'-')+'</code></td></tr><tr><th>Dibuat</th><td>'+fmt(h.created_at)+'</td></tr><tr><th>Proses</th><td>'+fmt(h.process_time)+'</td></tr><tr><th>Selesai</th><td>'+fmt(h.completed_time)+'</td></tr></table>';
+      document.getElementById('txModal').classList.add('show');
+    }
+
+    // CHAT MONITOR
+    async function loadChats(){
+      var rooms=['absensi','reject','worker'];
+      var container=document.getElementById('chatRooms');
+      container.innerHTML='<div class="center" style="grid-column:1/-1">Memuat chat...</div>';
+      var htmlArr=await Promise.all(rooms.map(async function(room){
+        var res=await sb.from('messages').select('*').eq('room',room).order('created_at',{ascending:false}).limit(20);
+        var msgs='';
+        if(res.data&&res.data.length>0){
+          var reversed=res.data.slice().reverse();
+          msgs=reversed.map(function(m){
+            var isImg=m.message&&m.message.match(/\.(jpg|png|jpeg|gif|webp)/i);
+            return '<div class="chat-msg"><span class="user_name">'+(m.username||'unknown')+'</span> <span class="badge '+(m.type==='bot'?'blue':'ok')+'" style="font-size:10px;padding:2px 6px">'+(m.type||'user')+'</span> <span class="time">'+fmtShort(m.created_at)+'</span><div class="text">'+(isImg?'<img src="'+m.message+'" class="img" onclick="window.open(this.src)">':(m.message||'(gambar)'))+'</div></div>'
+          }).join('');
+        }else{
+          msgs='<div class="center" style="padding:20px">Belum ada pesan.</div>';
+        }
+        var icons={absensi:'Absensi',reject:'Reject',worker:'Worker'};
+        return '<div class="chat-room"><h3>'+icons[room]+'</h3><div class="msgs">'+msgs+'</div></div>';
+      }));
+      container.innerHTML=htmlArr.join('');
+    }
+
+    // AI ANALYSIS
+    async function loadAIStats(){
+      try{
+        var res=await Promise.all([
+          sb.from('transactions').select('*',{count:'exact',head:true}).eq('status','Pending'),
+          sb.from('transactions').select('*',{count:'exact',head:true}).eq('status','Completed'),
+          sb.from('transactions').select('*',{count:'exact',head:true}).eq('status','Failed'),
+        ]);
+        document.getElementById('aiStatPending').textContent=res[0].count||0;
+        document.getElementById('aiStatCompleted').textContent=res[1].count||0;
+        document.getElementById('aiStatFailed').textContent=res[2].count||0;
+        document.getElementById('aiStatTotal').textContent=(res[0].count||0)+(res[1].count||0)+(res[2].count||0);
+      }catch(e){console.error(e)}
+    }
+
+    async function runAIAnalysis(){
+      var input=document.getElementById('aiInput').value.trim();
+      if(!input)return alert('Masukkan data atau pertanyaan dulu!');
+      var out=document.getElementById('aiOutput');
+      out.textContent='Menganalisis...';
+      try{
+        var res=await fetch('http://localhost:11434/api/generate',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            model:'mistral',
+            prompt:'Kamu adalah asisten analis pembayaran untuk 933Pay di Vietnam. Analisis data berikut dan berikan insight:\n\n'+input+'\n\nJawab dalam Bahasa Indonesia yang singkat dan jelas.',
+            stream:false
+          })
+        });
+        if(!res.ok)throw new Error('Ollama tidak merespons');
+        var json=await res.json();
+        out.textContent=json.response||'Tidak ada respon dari AI.';
+        var st=document.getElementById('aiStatus');
+        st.innerHTML='Normal';st.style.color='#16a34a';
+      }catch(e){
+        out.innerHTML='Ollama tidak terhubung. Pastikan Ollama sudah jalan (ollama serve). Atau klik tombol Summary/Insight untuk analisis lokal.';
+        var st=document.getElementById('aiStatus');
+        st.innerHTML='Offline';st.style.color='#dc2626';
+      }
+    }
+
+    async function genAISummary(){
+      var limit=parseInt(document.getElementById('aiPerPage').value)||200;
+      var out=document.getElementById('aiOutput');
+      out.textContent='Mengumpulkan data...';
+      try{
+        var res=await sb.from('transactions').select('*').limit(limit).order('created_at',{ascending:false});
+        var data=res.data;
+        if(!data||data.length===0){out.textContent='Belum ada data transaksi.';return}
+        var pending=data.filter(function(t){return t.status==='Pending'}).length;
+        var completed=data.filter(function(t){return t.status==='Completed'}).length;
+        var failed=data.filter(function(t){return t.status==='Failed'}).length;
+        var total=data.length;
+        var totalMoney=0;data.forEach(function(t){totalMoney+=Number(t.amount||0)});
+        var dateStr=new Date().toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta',weekday:'long',year:'numeric',month:'long',day:'numeric'});
+        out.textContent='RIWAYAT TRANSAKSI - '+dateStr+'\nData: '+limit+' transaksi terakhir\n\nTotal Transaksi: '+total+'\nPending: '+pending+'\nCompleted: '+completed+'\nFailed: '+failed+'\n\nTotal Nominal: '+money(totalMoney)+'\n\nPersentase Sukses: '+(total>0?((completed/total)*100).toFixed(1):0)+'%\nRate Gagal: '+(total>0?((failed/total)*100).toFixed(1):0)+'%';
+      }catch(e){out.textContent='Error: '+e.message}
+    }
+
+    async function genAIInsight(){
+      var limit=parseInt(document.getElementById('aiPerPage').value)||200;
+      var out=document.getElementById('aiOutput');
+      out.textContent='Menganalisis...';
+      try{
+        var res=await sb.from('transactions').select('*').limit(limit).order('created_at',{ascending:false});
+        var data=res.data;
+        if(!data||data.length===0){out.textContent='Belum ada data untuk insight.';return}
+        var pending=data.filter(function(t){return t.status==='Pending'}).length;
+        var total=data.length;
+        var totalMoney=0;data.forEach(function(t){totalMoney+=Number(t.amount||0)});
+        var avgMoney=total>0?totalMoney/total:0;
+        var bankCounts={};data.forEach(function(t){if(t.bank_name)bankCounts[t.bank_name]=(bankCounts[t.bank_name]||0)+1});
+        var topBank='N/A';var topBankCount=0;
+        Object.keys(bankCounts).forEach(function(k){if(bankCounts[k]>topBankCount){topBank=k;topBankCount=bankCounts[k]}});
+        var timeStr=new Date().toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta'});
+        var msg='INSIGHT SISTEM - '+timeStr+' WIB\nData: '+limit+' transaksi terakhir\n\n';
+        msg+=pending+' transaksi masih pending.\n';
+        msg+='Bank terbanyak: '+topBank+' ('+topBankCount+' TX)\n';
+        msg+='Rata-rata nominal: '+money(avgMoney)+'\n\nSaran:\n';
+        msg+=pending>50?'Banyak pending, percepat siklus kerja.':'Nota pending sedikit, bot kerja lebih lambat.';
+        msg+='\n'+'Data diambil: '+timeStr+' WIB';
+        out.textContent=msg;
+      }catch(e){out.textContent='Error: '+e.message}
+    }
+
+    // BUDAYA VIETNAM
+    function getMonthNames(){return ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']}
+    const CULTURAL_EVENTS=[
+      {id:'tet',name:'Tet Nguyen Dan',desc:'Tahun Baru Imlek Vietnam — perayaan terbesar di Vietnam',date:{m:1,d:29},duration:7,emoji:'🧧'},
+      {id:'tetnguyentieu',name:'Tet Nguyen Tieu',desc:'Festival Lampion — bulan purnama pertama tahun baru',date:{m:2,d:12},duration:1,emoji:'🏮'},
+      {id:'giotohungvuong',name:'Gio To Hung Vuong',desc:'Hari Raja Hung — hari libur nasional untuk menghormati pendiri Vietnam',date:{m:4,d:7},duration:1,emoji:'👑'},
+      {id:'giaiphong',name:'Ngay Giai Phong',desc:'Hari Pembebasan/Saigon Fall — akhir Perang Vietnam',date:{m:4,d:30},duration:1,emoji:'🇻🇳'},
+      {id:'quocteLaoDong',name:'Quoc Te Lao Dong',desc:'Hari Buruh Internasional — hari libur nasional',date:{m:5,d:1},duration:1,emoji:'⚒️'},
+      {id:'ledoanngo',name:'Tet Doan Ngo',desc:'Festival Mid-Year — mengusir roh jahat dan hama',date:{m:5,d:31},duration:1,emoji:'🎋'},
+      {id:'lephatdan',name:'Le Phat Dan',desc:'Waisak — hari kelahiran Buddha Siddhartha',date:{m:5,d:23},duration:1,emoji:'🪷'},
+      {id:'thieunhi',name:'Quoc Te Thieu Nhi',desc:'Hari Anak Internasional',date:{m:6,d:1},duration:1,emoji:'🧒'},
+      {id:'vulan',name:'Le Vu Lan',desc:'Festival Hantu Lapar — bulan purnama ke-7',date:{m:8,d:18},duration:1,emoji:'🕯️'},
+      {id:'quockhanh',name:'Ngay Quoc Khanh',desc:'Hari Nasional Vietnam — deklarasi kemerdekaan 1945',date:{m:9,d:2},duration:2,emoji:'🎉'},
+      {id:'trungthu',name:'Tet Trung Thu',desc:'Festival Mid-Autumn — anak-anak membawa lampion, mooncake',date:{m:10,d:6},duration:3,emoji:'🏮'},
+      {id:'halloween',name:'Halloween',desc:'Pesta kostum — populer di kalangan anak muda Vietnam',date:{m:10,d:31},duration:1,emoji:'🎃'},
+      {id:'noel',name:'Giang Sinh (Noel)',desc:'Natal — dirayakan di Vietnam sebagai hari libur umum',date:{m:12,d:25},duration:2,emoji:'🎄'},
+      {id:'tetduonglich',name:'Tet Duong Lich',desc:'Tahun Baru Masehi — perayaan global',date:{m:1,d:1},duration:1,emoji:'🎆'},
+    ];
+
+    function getCulturalNames(eventId){
+      var map={
+        tet:['Chuc Mung Nam Moi','An Khang Thinh Vuong','Van Su Nhu Y','Nam Moi Phat Tai','Cung Chuc Tan Xuan','Tien Vao Nam Moi','Phat Tai Phat Loc','Cau Chuc Binh An','Mung Tet Viet Nam','Xuan Moi Hanh Phuc'],
+        trungthu:['Trung Thu Vui Ve','Dem Hoi Trang Rang','Be Vui Trung Thu','Chiec Banh Trung Thu','Lang Den Lung Linh','Mua Trang Dep','Anh Trang Rang Ngo','Tho Trang Phat Qua'],
+        quockhanh:['Quoc Khanh Vui Ve','Mung Ngay Doc Lap','Ha Noi Mua Thu','To Quoc Linh Thien','Co Do Sao Vang','Tu Hao Vietnam','Muon Nam Vietnam'],
+        tetnguyentieu:['Nguyen Tieu Dang Hoi','Dem Hoi Den Long','Ruc Ro Anh Sang','Tet Nguyen Tieu Vui'],
+        giotohungvuong:['Nho Ve Nguon','Hung Vuong Phat Tich','Bai To Hung Vuong','Danh Nho Nguon Con'],
+        giaiphong:['Ngay Toan Thang','Thong Nhat Dat Nuoc','Mung Ngay Giai Phong','Hoa Binh Vietnam'],
+        noel:['Giang Sinh An Lanh','Noel Vui Ve','Chua Giang Sinh','Dem Thanh Dinh','Merry Christmas Vietnam'],
+        ledoanngo:['Tet Diet Sau Bo','Ngay Doan Ngo','Mung Tet Giu Suc Khoe'],
+        vulan:['Vu Lan Bao Hieu','Mung Le Vu Lan','Cong Cha Nghia Me'],
+        quocteLaoDong:['Quoc Te Lao Dong','Ngay Cua Nguoi Lao Dong'],
+        halloween:['Halloween Vui Ve','Hoa Hoa Quy','Bao Bap Cuoi Ma'],
+        thieunhi:['Tet Thieu Nhi','Ngay Cua Em','Tre Em Hom Nay'],
+      };
+      return map[eventId]||['Chuc Mung Vietnam','Phat Tai Phat Loc','Thanh Cong Viet Nam'];
+    }
+
+    function daysUntil(targetMonth,targetDay){
+      var now=new Date();
+      var jakartaOff=7*60;
+      var localOff=-now.getTimezoneOffset();
+      var diffMs=jakartaOff-localOff;
+      var jakarta=new Date(now.getTime()+diffMs*60*1000);
+      var y=jakarta.getFullYear();
+      var target=new Date(y,targetMonth-1,targetDay);
+      var today=new Date(y,jakarta.getMonth(),jakarta.getDate());
+      var diff=Math.floor((target-today)/(86400000));
+      if(diff<0){
+        target=new Date(y+1,targetMonth-1,targetDay);
+        diff=Math.floor((target-today)/(86400000));
+      }
+      return diff;
+    }
+
+    function isTodayEvent(targetMonth,targetDay){
+      var now=new Date();
+      var jakartaOff=7*60;
+      var localOff=-now.getTimezoneOffset();
+      var diffMs=jakartaOff-localOff;
+      var jakarta=new Date(now.getTime()+diffMs*60*1000);
+      return jakarta.getMonth()===targetMonth-1&&jakarta.getDate()===targetDay;
+    }
+
+    async function loadCulture(){
+      var cal=document.getElementById('cultureCalendar');
+      var sel=document.getElementById('cultureEventSelect');
+      var now=new Date();
+      var sorted=CULTURAL_EVENTS.slice().sort(function(a,b){
+        return daysUntil(a.date.m,a.date.d)-daysUntil(b.date.m,b.date.d);
+      });
+      cal.innerHTML=sorted.map(function(e){
+        var days=daysUntil(e.date.m,e.date.d);
+        var today=days===0;
+        var cls=today?'today':(days<0?'past':'');
+        var label=today?'Hari ini!':(days>0?days+' hari lagi':'Lewat');
+        return '<div class="culture-card'+(today?' highlight':'')+'"><div class="date">'+e.emoji+' '+getMonthNames()[e.date.m-1]+' '+e.date.d+'</div><h3>'+e.name+'</h3><div class="desc">'+e.desc+'</div><div style="margin-top:10px"><span class="countdown '+cls+'">'+label+'</span> <span class="cul-badge">'+e.duration+' hari</span></div></div>';
+      }).join('');
+      sel.innerHTML=sorted.map(function(e){
+        var days=daysUntil(e.date.m,e.date.d);
+        return '<option value="'+e.id+'"'+(days===0?' selected':'')+'>'+e.emoji+' '+e.name+(days===0?' (Hari Ini)':'')+'</option>';
+      }).join('');
+    }
+
+    async function generateCulturalNotes(){
+      var eventId=document.getElementById('cultureEventSelect').value;
+      var count=parseInt(document.getElementById('cultureNoteCount').value)||10;
+      var event=CULTURAL_EVENTS.find(function(e){return e.id===eventId});
+      var result=document.getElementById('cultureGenResult');
+      if(!event){
+        result.innerHTML='<span style="color:red">Error: Pilih event budaya dulu!</span>';
+        return;
+      }
+      var names=getCulturalNames(eventId);
+      var banks=['Vietcombank','BIDV','VietinBank','Techcombank','MB Bank','ACB','VPBank','Sacombank','HDBank','TPBank'];
+      result.innerHTML='⏳ Menggenerate '+count+' nota bertema '+event.emoji+' '+event.name+'...';
+      var created=0;
+      var errors=0;
+      var lastErr='';
+      for(var i=0;i<count;i++){
+        try{
+          var prefix=names[i%names.length]||'Chuc Mung';
+          var suffix=' '+Math.random().toString(36).slice(2,5).toUpperCase();
+          var nowTime = Date.now();
+          // Delay 5-10 detik agar tidak langsung direbut bot
+          var ptTime = nowTime + 5000 + Math.random() * 5000;
+          var tx={
+            transaction_id:'TX'+Math.random().toString(36).slice(2,16).toUpperCase(),
+            order_id:'ORD'+Math.floor(Math.random()*1e8),
+            account_number:'0'+Math.floor(1e9+Math.random()*9e9).toString(),
+            account_name:prefix+suffix,
+            bank_name:banks[Math.floor(Math.random()*banks.length)],
+            amount:Math.floor(50+Math.random()*9950)*1000,
+            status:'Pending',
+            created_at:new Date(nowTime).toISOString(),
+            process_time:new Date(ptTime).toISOString()
+          };
+          console.log('[Generate] Inserting tx #'+i, tx.transaction_id, tx.process_time);
+          var res=await sb.from('transactions').insert(tx);
+          if(!res.error){
+            created++;
+            console.log('[Generate] ✅ Berhasil:', tx.transaction_id);
+          }else{
+            errors++;
+            lastErr=res.error.message;
+            console.error('[Generate] ❌ Error:', res.error);
+          }
+        }catch(e){
+          errors++;
+          lastErr=e.message||'Unknown error';
+          console.error('[Generate] Exception:', e);
+        }
+      }
+      var msg='';
+      if(created>0){
+        msg='✅ Berhasil! '+created+' nota dibuat bertema '+event.emoji+' '+event.name;
+        if(errors>0) msg+=' ('+errors+' gagal: '+lastErr+')';
+      } else {
+        msg='❌ Gagal membuat nota! Error: '+lastErr;
+      }
+      result.innerHTML=msg;
+      loadTransactions();
+      loadAIStats();
+    }
+
+    async function runCulturalAnalysis(){
+      var prompt=document.getElementById('culturePrompt').value.trim();
+      var out=document.getElementById('cultureOutput');
+      if(!prompt){
+        var sorted=CULTURAL_EVENTS.slice().sort(function(a,b){return daysUntil(a.date.m,a.date.d)-daysUntil(b.date.m,b.date.d)});
+        var near=sorted[0];
+        prompt='Sekarang '+near.emoji+' '+near.name+' ('+near.desc+'). '+daysUntil(near.date.m,near.date.d)+' hari lagi. Berikan analisis tentang dampak event ini terhadap transaksi pembayaran di Vietnam dan saran untuk sistem kami.';
+        document.getElementById('culturePrompt').value=prompt;
+      }
+      out.textContent='Menganalisis via Ollama...';
+      try{
+        var res=await fetch('http://localhost:11434/api/generate',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            model:'mistral',
+            prompt:'Kamu adalah ahli budaya Vietnam dan analis sistem pembayaran. Jawab dalam Bahasa Indonesia.\n\nPertanyaan: '+prompt+'\n\nBerikan jawaban informatif dan relevan dengan konteks Vietnam.',
+            stream:false
+          })
+        });
+        if(!res.ok)throw new Error('Ollama tidak merespons');
+        var json=await res.json();
+        out.textContent=json.response||'Tidak ada respon.';
+      }catch(e){
+        out.innerHTML='Ollama offline. Gunakan tombol "Saran Nota" sebagai alternatif.';
+      }
+    }
+
+    async function suggestEventNotes(){
+      var out=document.getElementById('cultureOutput');
+      var sorted=CULTURAL_EVENTS.slice().sort(function(a,b){return daysUntil(a.date.m,a.date.d)-daysUntil(b.date.m,b.date.d)});
+      var near=sorted[0];
+      var names=getCulturalNames(near.id);
+      var msg='🎯 SARAN NOTA UNTUK '+near.emoji+' '+near.name.toUpperCase()+'\n\n';
+      msg+='Gunakan nama-nama akun berikut:\n';
+      names.forEach(function(n,i){if(n)msg+='  '+(i+1)+'. '+n+'XXX\n'});
+      msg+='\nJumlah nota yang disarankan: 20-50 per hari\n';
+      msg+='Selama '+near.duration+' hari ('+getMonthNames()[near.date.m-1]+' '+near.date.d+')\n\n';
+      msg+='Klik "Generate" di atas untuk membuat otomatis.\n';
+      msg+='Atau klik "Gen Banjir" untuk generate 100+ nota sekaligus!';
+      out.textContent=msg;
+    }
+
+    async function runCulturalFlood(){
+      var eventId=document.getElementById('cultureEventSelect').value;
+      var event=CULTURAL_EVENTS.find(function(e){return e.id===eventId});
+      if(!event)return alert('Pilih event dulu!');
+      var days=daysUntil(event.date.m,event.date.d);
+      if(days>30)return alert('Event '+event.name+' masih '+days+' hari lagi. Tunggu H-30 atau pilih event lain.');
+      var count=confirm('Generate 100 nota bertema '+event.emoji+' '+event.name+'?')?100:0;
+      if(!count)return;
+      document.getElementById('cultureNoteCount').value=count;
+      await generateCulturalNotes();
+    }
+
+    // End Cultural Functions
+
+    // SHIFT SWAPS
+    async function openShiftModal(){
+      document.getElementById('shiftModal').classList.add('show');
+      var res=await sb.from('workers').select('id,name,user_id').eq('status','active');
+      var opts='';
+      if(res.data){opts=res.data.map(function(w){return '<option value="'+w.id+'">'+w.name+' ('+w.user_id+')</option>'}).join('')}
+      document.getElementById('swapFrom').innerHTML=opts;
+      document.getElementById('swapTo').innerHTML=opts;
+      document.getElementById('swapDate').valueAsDate=new Date();
+    }
+    async function addShiftSwap(){
+      var from=document.getElementById('swapFrom').value;
+      var to=document.getElementById('swapTo').value;
+      var date=document.getElementById('swapDate').value;
+      if(from===to)return alertBox('shiftAlert','Worker asal dan tujuan harus berbeda','error');
+      var res=await sb.from('shift_swaps').insert({request_from:from,request_to:to,swap_date:date,status:'pending'});
+      closeModals();
+      if(res.error){
+        if(res.error.code==='42P01')return alertBox('shiftAlert','Table shift_swaps belum dibuat. Jalankan SQL setup dulu.','error');
+        return alertBox('shiftAlert',res.error.message,'error');
+      }
+      alertBox('shiftAlert','Request shift berhasil dibuat');
+      loadShiftSwaps();
+    }
+    async function loadShiftSwaps(){
+      var tb=document.getElementById('shiftTable');
+      var res=await sb.from('shift_swaps').select('*,worker_from:request_from(name),worker_to:request_to(name)').order('created_at',{ascending:false});
+      if(res.error){
+        if(res.error.code==='42P01'){tb.innerHTML='<tr><td colspan="5">Table shift_swaps belum ada. Jalankan SQL setup dulu.</td></tr>';return}
+        tb.innerHTML='<tr><td colspan="5">Error: '+res.error.message+'</td></tr>';return;
+      }
+      if(!res.data||res.data.length===0){tb.innerHTML='<tr><td colspan="5">Belum ada data.</td></tr>';return}
+      tb.innerHTML=res.data.map(function(s){
+        var actions=s.status==='pending'?'<button class="btn green small" onclick="approveSwap(\''+s.id+'\')">Approve</button>':'Selesai';
+        return '<tr><td>'+(s.worker_from? s.worker_from.name:'-')+'</td><td>'+(s.worker_to? s.worker_to.name:'-')+'</td><td>'+(s.swap_date||'-')+'</td><td>'+badge(s.status)+'</td><td>'+actions+'</td></tr>'
+      }).join('');
+    }
+    async function approveSwap(id){
+      var res=await sb.from('shift_swaps').update({status:'approved',admin_approver:email,approved_at:new Date().toISOString()}).eq('id',id);
+      if(res.error)return alertBox('shiftAlert',res.error.message,'error');
+      alertBox('shiftAlert','Shift swap disetujui');loadShiftSwaps();
+    }
+
+    // INIT
+    loadAll();
+    initRealtime();
+    startPolling();
+  </script>
+</body>
+</html>
