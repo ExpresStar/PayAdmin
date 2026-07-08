@@ -934,7 +934,22 @@ async function workerBotOneTick(botName) {
     
     // 2. Simulasi waktu reaksi manusia untuk membaca/melihat nota baru di layar
     // Kadang delay 2 detik, kadang 5 detik
-    const reactionDelayMs = 2000 + Math.random() * 3000;
+    let reactionDelayMs = 2000 + Math.random() * 3000;
+    let checkDelayMs = 4000 + Math.random() * 5000;
+
+    // Jika banyak nota yang menumpuk (>= 3 siap proses), bot bekerja lebih cepat tapi tetap manusiawi
+    if (validList.length >= 3) {
+      // Jangan terlalu rakus: ada peluang 40% bot sengaja "mengalah" agar bot/manusia lain kebagian
+      if (Math.random() < 0.4) {
+        console.log(`[WorkerBot][${botName}] Antrean panjang, ngalah dulu kasih ke yang lain (berbagi nota)...`);
+        return;
+      }
+      // Kalau lanjut, kerjanya dicepatkan tapi tidak secepat kilat (1 - 3.5 detik total)
+      reactionDelayMs = 800 + Math.random() * 1200;
+      checkDelayMs = 1200 + Math.random() * 1500;
+      console.log(`[WorkerBot][${botName}] Mode cepat aktif (Backlog: ${validList.length})`);
+    }
+
     await new Promise(r => setTimeout(r, reactionDelayMs));
 
     const nowIso = new Date().toISOString();
@@ -957,7 +972,6 @@ async function workerBotOneTick(botName) {
     console.log(`[WorkerBot][${botName}] ✓ Claimed ${tx.transaction_id}`);
 
     // 4. Simulasi waktu mengecek detail struk bukti transfer (baca & cek)
-    const checkDelayMs = 4000 + Math.random() * 5000;
     await new Promise(r => setTimeout(r, checkDelayMs));
 
     // 5. Cek mismatch proof vs data tabel
@@ -3730,15 +3744,6 @@ function startBotAutomationLoop() {
       cfg.insertDelay[0] +
       Math.random() * (cfg.insertDelay[1] - cfg.insertDelay[0]);
 
-    // Tunggu delay sesuai traffic config (jam ramai = cepat, jam sepi = lambat)
-    await new Promise((r) => setTimeout(r, delay));
-
-    if (!isBotRunning) {
-      console.log("🤖 Loop stopped setelah delay. Bot status:", isBotRunning);
-      _botLoopStarted = false;
-      return;
-    }
-
     try {
       console.log(`🤖 [Loop #${_botLoopCount}] Insert nota baru... (delay=${Math.round(delay)}ms)`);
       await autoInsertTransaction();
@@ -3747,12 +3752,15 @@ function startBotAutomationLoop() {
     }
 
     try {
-      await botProcessPendingTick();
+      // Jalankan bot tanpa memblokir pembuatan nota selanjutnya
+      botProcessPendingTick().catch(err => {
+        console.error("🤖 [Loop] botProcessPendingTick ERROR:", err);
+      });
     } catch (err) {
-      console.error("🤖 [Loop] botProcessPendingTick ERROR (loop tetap lanjut):", err);
+      console.error("🤖 [Loop] botProcessPendingTick ERROR:", err);
     }
 
-    // Jadwalkan loop berikutnya — SELALU, meskipun ada error di atas
+    // Jadwalkan loop berikutnya
     if (isBotRunning) {
       setTimeout(loop, delay);
     } else {
