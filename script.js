@@ -768,101 +768,6 @@ async function systemAutoApproveTick() {
   }
 }
 
-async function botProcessPendingTick() {
-  if (!WORKERS.length) return; // bot disabled
-  if (_botWorkTickRunning) return;
-  _botWorkTickRunning = true;
-
-  try {
-    // pick the oldest pending item to process next
-    const todayStr = getLocalDate();
-    const startOfToday = new Date(todayStr + "T00:00:00").toISOString();
-
-    const { data: pendingBatch } = await sb
-      .from("transactions")
-      .select(
-        "id,status,transaction_id,account_number,account_name,bank_name,amount,created_at,process_time",
-      )
-      .eq("status", "Pending")
-      .is("assigned_to", null)
-      .gte("created_at", startOfToday) // Hanya transaksi hari ini agar sinkron dengan dashboard default
-      .order("created_at", { ascending: true })
-      .limit(20);
-
-    if (!pendingBatch || pendingBatch.length === 0) return;
-
-    const nowMs = Date.now();
-    const validBatch = pendingBatch.filter(tx => {
-      if (!tx.process_time) return true;
-      // Supabase mengembalikan timestamp TANPA 'Z' - tambahkan agar parse sebagai UTC
-      const ptStr = tx.process_time.endsWith('Z') ? tx.process_time : tx.process_time + 'Z';
-      const pt = new Date(ptStr);
-      return nowMs >= pt.getTime();
-    });
-
-    if (validBatch.length === 0) return;
-
-    // Ambil 1 transaksi teratas yang sudah 'matang'
-    const txToProcess = validBatch[0];
-
-    const nowIso = new Date().toISOString();
-
-    for (const tx of [txToProcess]) {
-      // Tunggu 2-5 detik sebelum bot bereaksi mengambil nota ini (memberi kesempatan manusia)
-      const reactionDelayMs = 2000 + Math.random() * 3000;
-      await new Promise(r => setTimeout(r, reactionDelayMs));
-
-      const botName = WORKERS[Math.floor(Math.random() * WORKERS.length)];
-      const mismatch = getTxMismatch(tx);
-      const isReject = mismatch.anyWrong;
-
-      const updateData = isReject
-        ? { assigned_to: botName, status: "Failed", completed_time: nowIso }
-        : {
-            assigned_to: botName,
-            status: "Completed",
-            completed_time: nowIso,
-            process_time: nowIso,
-          };
-
-      const { data: updated, error } = await sb
-        .from("transactions")
-        .update(updateData)
-        .eq("id", tx.id)
-        .eq("status", "Pending")
-        .is("assigned_to", null)
-        .select();
-
-      if (error || !updated || updated.length === 0) continue;
-
-      // slow down per transaction to feel human
-      await new Promise((r) => setTimeout(r, 3000 + Math.random() * 4000));
-
-      await sb.from("transaction_logs").insert({
-        transaction_id: tx.id,
-        action: isReject ? "Rejected" : "Confirmed",
-        note: isReject
-          ? `Auto reject by bot: ${mismatch.note || "Mismatch"}`
-          : "Auto confirm by bot",
-        actor: botName,
-      });
-
-      if (isReject) {
-        // Send evidence to chat reject room
-        await botSendRejectSequence(
-          botName,
-          targetMismatchAnyPatch(tx),
-          mismatch,
-          1,
-        );
-      }
-      // Worker room tetap bot-free — tidak ada pesan ke room "worker"
-    }
-  } finally {
-    _botWorkTickRunning = false;
-  }
-}
-
 function targetMismatchAnyPatch(tx) {
   // Ensure tx has fields needed by renderer (some queries might omit them)
   return tx;
@@ -925,7 +830,7 @@ async function workerBotOneTick(botName) {
 
     if (validList.length === 0) {
       // Belum ada yang 'matang' / siap dikerjakan
-      return;
+      return { backlog: 0, processed: false };
     }
 
     // Pilih random dari yang sudah matang (ambil 5 teratas)
@@ -942,7 +847,7 @@ async function workerBotOneTick(botName) {
       // Jangan terlalu rakus: ada peluang 40% bot sengaja "mengalah" agar bot/manusia lain kebagian
       if (Math.random() < 0.4) {
         console.log(`[WorkerBot][${botName}] Antrean panjang, ngalah dulu kasih ke yang lain (berbagi nota)...`);
-        return;
+        return { backlog: validList.length, processed: false };
       }
       // Kalau lanjut, kerjanya dicepatkan tapi tidak secepat kilat (1 - 3.5 detik total)
       reactionDelayMs = 800 + Math.random() * 1200;
@@ -966,7 +871,7 @@ async function workerBotOneTick(botName) {
     if (claimErr || !claimed || claimed.length === 0) {
       // Bot lain / manusia sudah ambil duluan — coba lagi di tick berikutnya
       console.log(`[WorkerBot][${botName}] TX ${tx.transaction_id} sudah diklaim bot/human lain`);
-      return;
+      return { backlog: validList.length, processed: false };
     }
 
     console.log(`[WorkerBot][${botName}] ✓ Claimed ${tx.transaction_id}`);
@@ -1019,23 +924,41 @@ async function workerBotOneTick(botName) {
     }
     loadDashboardStats();
 
+    return { backlog: validList.length, processed: true };
+
   } catch (err) {
     console.error(`[WorkerBot][${botName}] Unexpected error:`, err.message);
+    return { backlog: 0, processed: false };
   }
 }
 
 async function workerBotLoop(botName) {
   // Loop tak terbatas — bot selalu jalan, tapi idle saat off-shift
   while (true) {
-    await workerBotOneTick(botName);
+    const result = await workerBotOneTick(botName);
+    const onShift = isWorkerOnShift(botName);
+    
+    let idleMs = 0;
+    
+    if (!onShift) {
+      // Off-shift: sangat lambat (cek setiap 90-150 detik)
+      idleMs = 90000 + Math.random() * 60000;
+    } else {
+      // On-shift: atur kecepatan berdasarkan antrean
+      const backlog = result?.backlog || 0;
+      
+      if (backlog >= 3) {
+        // Banyak antrean: istirahat sangat singkat (0.5 - 1.5 detik) agar langsung hajar nota berikutnya
+        idleMs = 500 + Math.random() * 1000;
+      } else if (backlog > 0) {
+        // Antrean sedang: istirahat normal (2 - 5 detik)
+        idleMs = 2000 + Math.random() * 3000;
+      } else {
+        // Kosong: santai ngecek setiap 8 - 15 detik
+        idleMs = 8000 + Math.random() * 7000;
+      }
+    }
 
-    // Jeda antar tick:
-    // - On-shift  : 20–40 detik (kerja santai tidak terlalu rakus transaksi)
-    // - Off-shift : 90–150 detik (cek sesekali)
-    const onShift   = isWorkerOnShift(botName);
-    const idleMs    = onShift
-      ? 20000 + Math.random() * 20000  // 20–40 detik
-      : 90000 + Math.random() * 60000; // 90–150 detik
     await new Promise(r => setTimeout(r, idleMs));
   }
 }
