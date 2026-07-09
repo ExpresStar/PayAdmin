@@ -394,7 +394,11 @@ async function forwardToTelegram(msg) {
 
     // Forward image as photo (handle URL + data URI)
     if (imgUrl) {
-      await sendPhotoToGroup(chatId, imgUrl, tgCaption);
+      const res = await sendPhotoToGroup(chatId, imgUrl, tgCaption);
+      if (!res || !res.ok) {
+        console.warn(`[→TG] Photo send failed (${res?.description || "Unknown error"}), falling back to text message`);
+        await sendToGroup(chatId, tgCaption);
+      }
     } else {
       await sendToGroup(chatId, tgCaption);
     }
