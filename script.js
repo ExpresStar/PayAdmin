@@ -2642,7 +2642,7 @@ async function autoInsertTransaction() {
 // ─────────────────────────────────────────────────────
 let _reportExcelData = { title: "", headers: [], rows: [] };
 
-async function fetchAllTransactions(columns, modifyQuery = null, maxRows = 10000) {
+async function fetchAllTransactions(columns, modifyQuery = null, maxRows = 1000000) {
   let allData = [];
   let page = 0;
   const pageSize = 1000;
