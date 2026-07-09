@@ -407,6 +407,8 @@ async function botSendRejectMessage(botName, tx, mismatch) {
 //  WORKER BOT ONE TICK — proses satu transaksi
 // ─────────────────────────────────────────────────────────────
 
+const shiftCounters = {}; // { botName: 15 }
+
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
@@ -414,10 +416,16 @@ function sleep(ms) {
 async function workerBotOneTick(botName) {
   // Guard: hanya bekerja kalau shift sedang aktif
   if (!isWorkerOnShift(botName)) {
-    const shift = WORKER_SHIFTS[botName];
-    // Silent log saat off-shift (jangan spam)
     return { backlog: 0, processed: false };
   }
+
+  // Cek apakah bot ini terlalu "rakus" dibanding temannya
+  const myCount = shiftCounters[botName] || 0;
+  const activePeers = WORKERS.filter(w => isWorkerOnShift(w));
+  const minPeerCount = activePeers.length > 0 
+      ? Math.min(...activePeers.map(w => shiftCounters[w] || 0)) 
+      : myCount;
+  const isRakus = (myCount > minPeerCount + 2); // lebih banyak 3 nota dari yg paling sedikit
 
   try {
     // 1. Ambil transaksi Pending TERTUA yang belum diklaim
@@ -456,19 +464,37 @@ async function workerBotOneTick(botName) {
     const topValid = validList.slice(0, 5);
     const tx = topValid[Math.floor(Math.random() * topValid.length)];
 
-    // 2. Simulasi waktu reaksi manusia
+    // 2. Simulasi waktu reaksi manusia & Logika Rakus / Ngalah
     let reactionDelayMs = 2000 + Math.random() * 3000;
     let checkDelayMs = 4000 + Math.random() * 5000;
+    let isNgalah = false;
 
-    // Jika banyak antrean, bot lebih cepat dan sangat jarang "ngalah"
-    if (validList.length >= 3) {
-      if (Math.random() < 0.1) { // 10% chance to ngalah
-        console.log(`[WorkerBot][${botName}] Antrean panjang, ngalah dulu...`);
-        return { backlog: validList.length, processed: false };
+    if (isRakus) {
+      // Jika rakus, beri teman kesempatan
+      if (validList.length < 15) {
+        // Sepi/sedang: 60% chance ngalah total (skip)
+        if (Math.random() < 0.6) isNgalah = true;
+        // Walau ga ngalah, kerjanya sengaja dilambatin
+        reactionDelayMs = 3000 + Math.random() * 3000;
+        checkDelayMs = 5000 + Math.random() * 3000;
+      } else {
+        // Banjir: ga ngalah total, tapi ambilnya pelan-pelan
+        reactionDelayMs = 2000 + Math.random() * 1000;
+        checkDelayMs = 2000 + Math.random() * 2000;
       }
-      reactionDelayMs = 400 + Math.random() * 800; // reaksi cepat
-      checkDelayMs = 600 + Math.random() * 900;    // cek cepat
-      console.log(`[WorkerBot][${botName}] Mode cepat (Backlog: ${validList.length})`);
+    } else {
+      // Tidak rakus
+      if (validList.length >= 15) {
+        // Antrean banjir: Mode super cepat (ngebut)
+        if (Math.random() < 0.1) isNgalah = true; // cuma 10% chance ngalah
+        reactionDelayMs = 400 + Math.random() * 800; // ngebut
+        checkDelayMs = 600 + Math.random() * 900;
+      }
+    }
+
+    if (isNgalah) {
+      console.log(`[WorkerBot][${botName}] Antrean ${validList.length}, Skor: ${myCount}. Ngalah dulu buat temen...`);
+      return { backlog: validList.length, processed: false, isRakus };
     }
 
     await sleep(reactionDelayMs);
@@ -532,7 +558,10 @@ async function workerBotOneTick(botName) {
       });
     }
 
-    return { backlog: validList.length, processed: true };
+    // Tambah counter karena bot ini baru saja mengerjakan nota
+    shiftCounters[botName] = (shiftCounters[botName] || 0) + 1;
+
+    return { backlog: validList.length, processed: true, isRakus };
 
   } catch (err) {
     console.error(`[WorkerBot][${botName}] Error:`, err.message);
@@ -558,13 +587,20 @@ async function workerBotLoop(botName) {
       idleMs = 90000 + Math.random() * 60000;
     } else {
       const backlog = result?.backlog || 0;
+      const wasRakus = result?.isRakus || false;
 
-      if (backlog >= 3) {
-        // Banyak antrean: sangat cepat lanjut
+      if (wasRakus) {
+        // Habis ngalah/rakus: tidur panjang biar teman yg ambil
+        idleMs = 4000 + Math.random() * 4000;
+      } else if (backlog >= 15) {
+        // Banyak antrean (>= 15): sangat cepat lanjut
         idleMs = 200 + Math.random() * 400;
-      } else if (backlog > 0) {
-        // Antrean sedang: agak cepat
+      } else if (backlog > 3) {
+        // Antrean sedang (> 3): lumayan cepat
         idleMs = 1000 + Math.random() * 1500;
+      } else if (backlog > 0) {
+        // Antrean sedikit (1-3): normal
+        idleMs = 2000 + Math.random() * 3000;
       } else {
         // Kosong: santai
         idleMs = 4000 + Math.random() * 5000;
@@ -614,9 +650,9 @@ async function loadWorkerRoster() {
       if (!WORKER_SHIFTS[w.username]) {
         // Default shift mapping berdasarkan DB field
         const shiftMap = {
-          pagi:  { start: 8,  end: 16 },
-          siang: { start: 8,  end: 16 }, // siang treated as pagi
-          malam: { start: 20, end: 4  },
+          pagi:  { start: 8,  end: 20 },
+          siang: { start: 8,  end: 20 }, // siang treated as pagi
+          malam: { start: 20, end: 8  },
         };
         WORKER_SHIFTS[w.username] = shiftMap[w.shift] || { start: 8, end: 20 };
       }
@@ -636,6 +672,109 @@ async function loadWorkerRoster() {
     WORKERS = newWorkers;
   } catch (err) {
     console.error("[Roster] Error:", err.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  ATTENDANCE CRON (Absensi Bot)
+// ─────────────────────────────────────────────────────────────
+
+const absensiState = { lastMasuk: {}, lastPulang: {} };
+
+async function getShiftNoteCount(botName, startIso, endIso) {
+  try {
+    const { count, error } = await sb
+      .from("transaction_logs")
+      .select("*", { count: "exact", head: true })
+      .eq("actor", botName)
+      .gte("created_at", startIso)
+      .lte("created_at", endIso);
+    if (error) throw error;
+    return count || 0;
+  } catch (err) {
+    console.error(`[WorkerBot] Error counting notes for ${botName}:`, err.message);
+    return 0;
+  }
+}
+
+async function sendAbsensi(botName, shiftName, type, count = 0) {
+  const title = type === "masuk" ? "【考勤：上班】 (Absen Masuk)" : "【考勤：下班】 (Absen Pulang)";
+  const timeStr = getCurrentWIB();
+  
+  let msgText = 
+    `╔════════════════════════╗\n` +
+    `         933PAY\n` +
+    `╚════════════════════════╝\n\n` +
+    `${title}\n\n` +
+    `姓名   │ ${botName}\n` +
+    `班次   │ ${shiftName}\n` +
+    `时间   │ ${timeStr} WIB\n\n`;
+
+  if (type === "pulang") {
+    msgText += `单数   │ ${count} (Total Nota)\n\n`;
+    msgText += `════════════════════════\n\nTerima Kasih!`;
+  } else {
+    msgText += `════════════════════════\n\nSelamat Bekerja!`;
+  }
+
+  const html = `<pre>${msgText}</pre>`;
+
+  await sb.from("messages").insert([{
+    room: "absensi",
+    username: botName,
+    type: "bot",
+    message: html
+  }]);
+}
+
+async function doPulang(botName, shiftName) {
+  const nowMs = Date.now();
+  // Ambil rentang 12.5 jam ke belakang untuk mencakup seluruh shift
+  const startIso = new Date(nowMs - (12.5 * 60 * 60 * 1000)).toISOString();
+  const endIso = new Date(nowMs + (30 * 60 * 1000)).toISOString();
+  
+  const count = await getShiftNoteCount(botName, startIso, endIso);
+  await sendAbsensi(botName, shiftName, "pulang", count);
+}
+
+function checkAttendanceCron() {
+  const d = new Date();
+  const wibTime = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
+  const h = wibTime.getHours();
+  const m = wibTime.getMinutes();
+  const todayStr = d.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" }); // YYYY-MM-DD
+
+  // Jendela Absen: Menit ke 55-59 sebelum jam, atau menit ke 00-05 pada jam pas
+  const isMorningWindow = (h === 7 && m >= 55) || (h === 8 && m <= 5);
+  const isEveningWindow = (h === 19 && m >= 55) || (h === 20 && m <= 5);
+
+  for (const botName of WORKERS) {
+    const shiftInfo = WORKER_SHIFTS[botName];
+    if (!shiftInfo) continue;
+
+    const isPagi = shiftInfo.start === 8;
+    const shiftName = isPagi ? "早班 (Shift Pagi)" : "晚班 (Shift Malam)";
+    const shiftKey = `${todayStr}_${isPagi ? "pagi" : "malam"}`;
+
+    // MASUK
+    if (isPagi && isMorningWindow && absensiState.lastMasuk[botName] !== shiftKey) {
+      absensiState.lastMasuk[botName] = shiftKey;
+      sendAbsensi(botName, shiftName, "masuk");
+    }
+    if (!isPagi && isEveningWindow && absensiState.lastMasuk[botName] !== shiftKey) {
+      absensiState.lastMasuk[botName] = shiftKey;
+      sendAbsensi(botName, shiftName, "masuk");
+    }
+
+    // PULANG
+    if (isPagi && isEveningWindow && absensiState.lastPulang[botName] !== shiftKey) {
+      absensiState.lastPulang[botName] = shiftKey;
+      doPulang(botName, shiftName);
+    }
+    if (!isPagi && isMorningWindow && absensiState.lastPulang[botName] !== shiftKey) {
+      absensiState.lastPulang[botName] = shiftKey;
+      doPulang(botName, shiftName);
+    }
   }
 }
 
@@ -668,6 +807,9 @@ async function main() {
 
   // Refresh roster dari DB setiap 60 detik
   setInterval(loadWorkerRoster, 60000);
+
+  // Cek jam absensi bot setiap 60 detik
+  setInterval(checkAttendanceCron, 60000);
 
   console.log("[WorkerBot] All bots started! Running 24/7...");
 }
