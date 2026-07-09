@@ -2278,18 +2278,6 @@ async function loadBanks() {
     .join("");
 }
 
-function subscribeAppRealtime() {
-  sb.channel("transactions-live")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "transactions" },
-      () => {
-        loadTransactions(true);
-        loadHistory(true);
-      },
-    )
-    .subscribe();
-}
 
 // ─────────────────────────────────────────────────────
 //  INIT
@@ -2654,7 +2642,36 @@ async function autoInsertTransaction() {
 // ─────────────────────────────────────────────────────
 let _reportExcelData = { title: "", headers: [], rows: [] };
 
+async function fetchAllTransactions(columns, modifyQuery = null, maxRows = 10000) {
+  let allData = [];
+  let page = 0;
+  const pageSize = 1000;
+  
+  while (allData.length < maxRows) {
+    let query = sb.from("transactions").select(columns);
+    if (modifyQuery) {
+      query = modifyQuery(query);
+    }
+    query = query.range(page * pageSize, (page + 1) * pageSize - 1);
+    
+    const { data, error } = await query;
+    if (error) {
+      console.error("[fetchAllTransactions] Error:", error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    allData = allData.concat(data);
+    if (data.length < pageSize) break;
+    page++;
+  }
+  return allData.slice(0, maxRows);
+}
+
 function openReportModal(icon, title, html) {
+  const modalEl = document.querySelector("#modal-report .modal");
+  if (modalEl) {
+    modalEl.style.maxWidth = "880px"; // Premium wider report layout
+  }
   document.getElementById("report-modal-icon").textContent = icon;
   document.getElementById("report-modal-title").textContent = title;
   document.getElementById("report-modal-body").innerHTML = html;
@@ -2663,7 +2680,7 @@ function openReportModal(icon, title, html) {
 
 function reportTable(headers, rawRows, { storeForExport = true } = {}) {
   if (!rawRows.length)
-    return `<div style="text-align:center;padding:40px;color:#9ca3af;font-size:13px">No data available.</div>`;
+    return `<div style="text-align:center;padding:40px;color:#94a3b8;font-size:13px;font-weight:500">No data available in this range.</div>`;
 
   const stripHtml = (s) =>
     String(s)
@@ -2676,41 +2693,50 @@ function reportTable(headers, rawRows, { storeForExport = true } = {}) {
   }
 
   const thStyle = `
-    padding: 13px 18px;
-    text-align: left;
+    padding: 14px 18px;
+    text-align: center;
     font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    font-weight: 800;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: #fff;
-    background: #1e3a5f;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
     white-space: nowrap;
+    border-right: 1px solid #334155;
   `;
 
-  const ths = headers.map((h) => `<th style="${thStyle}">${h}</th>`).join("");
+  const ths = headers.map((h, idx) => {
+    const borderNone = idx === headers.length - 1 ? "border-right: none;" : "";
+    return `<th style="${thStyle}${borderNone}">${h}</th>`;
+  }).join("");
 
   const trs = rawRows
     .map((r, i) => {
-      const bg = i % 2 === 0 ? "#ffffff" : "#f4f7fb";
+      const bg = i % 2 === 0 ? "#ffffff" : "#f8fafc";
       const tdStyle = `
-      padding: 12px 18px;
-      border-bottom: 1px solid #e8edf4;
-      font-size: 12.5px;
-      color: #1e293b;
-      background: ${bg};
-      vertical-align: middle;
-    `;
+        padding: 12px 18px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 12px;
+        color: #334155;
+        background: ${bg};
+        vertical-align: middle;
+        text-align: center;
+        border-right: 1px solid #e2e8f0;
+      `;
       return (
-        `<tr style="transition:background .15s" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='${bg}'">` +
-        r.map((c) => `<td style="${tdStyle}">${c}</td>`).join("") +
+        `<tr style="transition:background .15s" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${bg}'">` +
+        r.map((c, idx) => {
+          const borderNone = idx === r.length - 1 ? "border-right: none;" : "";
+          return `<td style="${tdStyle}${borderNone}">${c}</td>`;
+        }).join("") +
         `</tr>`
       );
     })
     .join("");
 
   return `
-    <div style="border-radius:10px;overflow:hidden;border:1.5px solid #d1dbe8;box-shadow:0 2px 12px rgba(30,58,95,.07)">
-    <table style="width:100%;border-collapse:collapse;font-family:'Roboto',sans-serif">
+    <div style="border-radius:12px;overflow:hidden;border:1px solid #cbd5e1;box-shadow:0 4px 20px rgba(0,0,0,.03);margin-top:10px">
+      <table style="width:100%;border-collapse:collapse;font-family:'Roboto',sans-serif">
         <thead><tr>${ths}</tr></thead>
         <tbody>${trs}</tbody>
       </table>
@@ -2718,23 +2744,33 @@ function reportTable(headers, rawRows, { storeForExport = true } = {}) {
 }
 
 function reportStatStrip(stats) {
+  const cardIcons = ["📊", "💰", "🏦", "❌", "👤", "📅"];
   const colors = [
-    "#1d4ed8",
-    "#059669",
-    "#d97706",
-    "#dc2626",
-    "#7c3aed",
-    "#0891b2",
+    { primary: "#2563eb", bg: "#eff6ff", text: "#1d4ed8" }, // Blue
+    { primary: "#16a34a", bg: "#f0fdf4", text: "#15803d" }, // Green
+    { primary: "#ea580c", bg: "#fff7ed", text: "#c2410c" }, // Orange
+    { primary: "#dc2626", bg: "#fef2f2", text: "#b91c1c" }, // Red
+    { primary: "#9333ea", bg: "#faf5ff", text: "#7e22ce" }, // Purple
+    { primary: "#0891b2", bg: "#ecfeff", text: "#0e7490" }, // Cyan
   ];
   return (
-    `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">` +
+    `<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:12px;margin-bottom:20px">` +
     stats
       .map(
-        ([label, value], i) => `
-      <div style="flex:1;min-width:110px;background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:12px 16px;box-shadow:0 1px 4px rgba(0,0,0,.04)">
-        <div style="font-size:10px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${label}</div>
-        <div style="font-size:18px;font-weight:800;color:${colors[i % colors.length]}">${value}</div>
-      </div>`,
+        ([label, value], i) => {
+          const clr = colors[i % colors.length];
+          const icon = cardIcons[i % cardIcons.length];
+          return `
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;box-shadow:0 4px 15px rgba(0,0,0,.02);display:flex;align-items:center;justify-content:space-between;position:relative;overflow:hidden">
+            <div>
+              <div style="font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">${label}</div>
+              <div style="font-size:18px;font-weight:800;color:${clr.primary}">${value}</div>
+            </div>
+            <div style="width:36px;height:36px;border-radius:8px;background:${clr.bg};color:${clr.text};display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.02)">
+              ${icon}
+            </div>
+          </div>`;
+        },
       )
       .join("") +
     `</div>`
@@ -2744,14 +2780,14 @@ function reportStatStrip(stats) {
 function reportHeader(title, subtitle) {
   const now = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
   return `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #e2e8f0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #e2e8f0">
       <div>
-        <div style="font-size:15px;font-weight:800;color:#1e293b">${title}</div>
-        <div style="font-size:11px;color:#64748b;margin-top:3px">${subtitle}</div>
+        <div style="font-size:16px;font-weight:850;color:#0f172a;letter-spacing:-0.02em">${title}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px;font-weight:500">${subtitle}</div>
       </div>
-      <div style="text-align:right;font-size:10px;color:#94a3b8">
-        <div>PayAdmin Financial System</div>
-        <div style="font-weight:600;color:#64748b">Generated: ${now} WIB</div>
+      <div style="text-align:right;font-size:10px;color:#94a3b8;line-height:1.4">
+        <div style="font-weight:700;color:#475569;font-size:10.5px">PayAdmin Intelligent Reporting</div>
+        <div>Generated: <span style="font-weight:600;color:#334155">${now} WIB</span></div>
       </div>
     </div>`;
 }
@@ -2791,8 +2827,8 @@ async function reportTransactionSummary() {
     `<div style="text-align:center;padding:30px;color:#94a3b8">数据加载中…</div>`,
   );
 
-  const { data } = await sb.from("transactions").select("status, created_at");
-  if (!data) return;
+  const data = await fetchAllTransactions("status, created_at");
+  if (!data || !data.length) return;
 
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
@@ -2879,10 +2915,8 @@ async function reportRevenue() {
     `<div style="text-align:center;padding:30px;color:#94a3b8">Loading data…</div>`,
   );
 
-  const { data } = await sb
-    .from("transactions")
-    .select("bank_name, amount, status");
-  if (!data) return;
+  const data = await fetchAllTransactions("bank_name, amount, status");
+  if (!data || !data.length) return;
 
   const byBank = {};
   data.forEach((t) => {
@@ -2972,8 +3006,8 @@ async function reportBankPerformance() {
     `<div style="text-align:center;padding:30px;color:#94a3b8">Loading data…</div>`,
   );
 
-  const { data } = await sb.from("transactions").select("bank_name, status");
-  if (!data) return;
+  const data = await fetchAllTransactions("bank_name, status");
+  if (!data || !data.length) return;
 
   const byBank = {};
   data.forEach((t) => {
@@ -3071,15 +3105,11 @@ async function reportFailedTransactions() {
     `<div style="text-align:center;padding:30px;color:#94a3b8">Loading data…</div>`,
   );
 
-  const { data } = await sb
-    .from("transactions")
-    .select(
-      "transaction_id, account_name, account_number, bank_name, amount, completed_time, assigned_to",
-    )
-    .eq("status", "Failed")
-    .order("completed_time", { ascending: false })
-    .limit(100);
-  if (!data) return;
+  const data = await fetchAllTransactions(
+    "transaction_id, account_name, account_number, bank_name, amount, completed_time, assigned_to",
+    q => q.eq("status", "Failed").order("completed_time", { ascending: false })
+  );
+  if (!data || !data.length) return;
 
   const fmt = (n) => Number(n).toLocaleString("vi-VN");
 
@@ -3160,10 +3190,8 @@ async function reportTopAccounts() {
     `<div style="text-align:center;padding:30px;color:#94a3b8">Loading data…</div>`,
   );
 
-  const { data } = await sb
-    .from("transactions")
-    .select("account_name, account_number, bank_name, amount, status");
-  if (!data) return;
+  const data = await fetchAllTransactions("account_name, account_number, bank_name, amount, status");
+  if (!data || !data.length) return;
 
   const byAcc = {};
   data.forEach((t) => {
@@ -3267,11 +3295,8 @@ async function reportTimeAnalysis() {
     `<div style="text-align:center;padding:30px;color:#94a3b8">Loading data…</div>`,
   );
 
-  const { data } = await sb
-    .from("transactions")
-    .select("created_at, status")
-    .not("created_at", "is", null);
-  if (!data) return;
+  const data = await fetchAllTransactions("created_at, status", q => q.not("created_at", "is", null));
+  if (!data || !data.length) return;
 
   const byHour = Array.from({ length: 24 }, (_, h) => ({
     hour: h,
