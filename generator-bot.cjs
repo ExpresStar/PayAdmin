@@ -103,8 +103,10 @@ async function txValueExists(field, value) {
 let lastTime = Date.now();
 let lastProcessTime = Date.now();
 
-function generateSmartTransaction(pendingCount) {
+function generateSmartTransaction(pendingCount, baseLastTime, baseLastProcessTime) {
   pendingCount = pendingCount || 0;
+  let localLastTime = baseLastTime;
+  let localLastProcessTime = baseLastProcessTime;
 
   const firstNames = [
     "Nguyen", "Tran", "Le", "Pham", "Hoang", "Phan", "Vu", "Dang",
@@ -146,12 +148,12 @@ function generateSmartTransaction(pendingCount) {
   const amount = (Math.floor(Math.random() * 50) + 1) * 50000;
 
   const nowReal = Date.now();
-  if (lastTime < nowReal) lastTime = nowReal;
+  if (localLastTime < nowReal) localLastTime = nowReal;
 
   const cfg = getTrafficConfig();
   const insertDelay = cfg.insertDelay[0] + Math.random() * (cfg.insertDelay[1] - cfg.insertDelay[0]);
-  lastTime += insertDelay;
-  const created = new Date(lastTime);
+  localLastTime += insertDelay;
+  const created = new Date(localLastTime);
 
   let processDelay = cfg.processDelay[0] + Math.random() * (cfg.processDelay[1] - cfg.processDelay[0]);
 
@@ -171,36 +173,40 @@ function generateSmartTransaction(pendingCount) {
     }
   }
 
-  let targetProcess = lastTime + processDelay;
+  let targetProcess = localLastTime + processDelay;
 
-  if (lastProcessTime < lastTime) {
-    lastProcessTime = lastTime;
+  if (localLastProcessTime < localLastTime) {
+    localLastProcessTime = localLastTime;
   }
 
   // Ensure process_time strictly sequential
-  if (targetProcess <= lastProcessTime) {
-    targetProcess = lastProcessTime + 1000 + (Math.random() * 3000);
+  if (targetProcess <= localLastProcessTime) {
+    targetProcess = localLastProcessTime + 1000 + (Math.random() * 3000);
   }
 
-  lastProcessTime = targetProcess;
+  localLastProcessTime = targetProcess;
   const processTime = new Date(targetProcess);
 
   return {
-    transaction_id: "TX" + randomUUIDLike().replace(/-/g, "").slice(0, 16).toUpperCase(),
-    order_id: "ORD" + randomDigits(8),
-    account_number: accNum,
-    account_name: name,
-    bank_name: bank,
-    amount: amount,
-    status: "Pending",
-    created_at: created.toISOString(),
-    process_time: processTime.toISOString(),
+    tx: {
+      transaction_id: "TX" + randomUUIDLike().replace(/-/g, "").slice(0, 16).toUpperCase(),
+      order_id: "ORD" + randomDigits(8),
+      account_number: accNum,
+      account_name: name,
+      bank_name: bank,
+      amount: amount,
+      status: "Pending",
+      created_at: created.toISOString(),
+      process_time: processTime.toISOString(),
+    },
+    newLastTime: localLastTime,
+    newLastProcessTime: localLastProcessTime
   };
 }
 
 async function generateSmartTransactionUnique(pendingCount = 0, maxTries = 25) {
   for (let i = 0; i < maxTries; i++) {
-    const tx = generateSmartTransaction(pendingCount);
+    const { tx, newLastTime, newLastProcessTime } = generateSmartTransaction(pendingCount, lastTime, lastProcessTime);
     tx.account_name = (tx.account_name || "").replace(/\s+/g, " ").trim();
 
     const [idExists, numExists, nameExists] = await Promise.all([
@@ -209,15 +215,22 @@ async function generateSmartTransactionUnique(pendingCount = 0, maxTries = 25) {
       txValueExists("account_name", tx.account_name),
     ]);
 
-    if (!idExists && !numExists && !nameExists) return tx;
+    if (!idExists && !numExists && !nameExists) {
+      lastTime = newLastTime;
+      lastProcessTime = newLastProcessTime;
+      return tx;
+    }
   }
 
   // Fallback: force unique
-  const tx = generateSmartTransaction(pendingCount);
+  const { tx, newLastTime, newLastProcessTime } = generateSmartTransaction(pendingCount, lastTime, lastProcessTime);
   const safeSuffix = randomDigits(4);
   tx.account_name = `${(tx.account_name || "Client").replace(/\s+/g, " ").trim()} ${safeSuffix}`;
   tx.transaction_id = "TX" + randomUUIDLike().replace(/-/g, "").slice(0, 16).toUpperCase();
   tx.account_number = "0" + randomDigits(9);
+  
+  lastTime = newLastTime;
+  lastProcessTime = newLastProcessTime;
   return tx;
 }
 
