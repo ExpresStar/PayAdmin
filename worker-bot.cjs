@@ -624,19 +624,19 @@ async function workerBotLoop(botName) {
 
     if (wasRakus) {
       // Habis ngalah/rakus: tidur panjang biar teman yg ambil
-      idleMs = 4000 + Math.random() * 4000;
+      idleMs = 6000 + Math.random() * 4000;
     } else if (backlog >= 15) {
-      // Banyak antrean (>= 15): sangat cepat lanjut
-      idleMs = 200 + Math.random() * 400;
+      // Banyak antrean (>= 15): jeda 2.5 - 4.5 detik (cukup cepat tapi ramah database)
+      idleMs = 2500 + Math.random() * 2000;
     } else if (backlog > 3) {
-      // Antrean sedang (> 3): lumayan cepat
-      idleMs = 1000 + Math.random() * 1500;
+      // Antrean sedang (> 3): jeda 4 - 6 detik
+      idleMs = 4000 + Math.random() * 2000;
     } else if (backlog > 0) {
-      // Antrean sedikit (1-3): normal
-      idleMs = 2000 + Math.random() * 3000;
+      // Antrean sedikit (1-3): jeda 6 - 9 detik
+      idleMs = 6000 + Math.random() * 3000;
     } else {
-      // Kosong: santai
-      idleMs = 15000 + Math.random() * 5000;
+      // Kosong: santai (jeda 20 - 30 detik)
+      idleMs = 20000 + Math.random() * 10000;
     }
 
     await new Promise(r => setTimeout(r, idleMs));
