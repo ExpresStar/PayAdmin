@@ -356,10 +356,10 @@ async function botSendRejectMessage(botName, tx, mismatch) {
   const txStatus = statusMap[tx.status] || "待处理";
 
   let bottomErrors = [];
-  if (mismatch.wrongBank) bottomErrors.push(".bank");
-  if (mismatch.wrongName) bottomErrors.push(".name");
   if (mismatch.wrongNominal) bottomErrors.push(".bil");
-  const bottomText = bottomErrors.join("   ") || ".unknown";
+  else if (mismatch.wrongBank) bottomErrors.push(".bank");
+  else if (mismatch.wrongName) bottomErrors.push(".name");
+  const bottomText = bottomErrors[0] || ".unknown";
 
   const msgText =
     `╭────────────────────────╮\n` +
