@@ -277,6 +277,29 @@ async function checkBotStatus() {
 }
 
 
+async function initLastProcessTime() {
+  try {
+    const { data, error } = await sb
+      .from("transactions")
+      .select("process_time")
+      .not("process_time", "is", null)
+      .order("process_time", { ascending: false })
+      .limit(1);
+
+    if (!error && data && data.length > 0 && data[0].process_time) {
+      // Supabase returns timestamps without Z — append Z to parse as UTC
+      const ptStr = String(data[0].process_time).endsWith("Z") ? data[0].process_time : data[0].process_time + "Z";
+      const dbTime = new Date(ptStr).getTime();
+      if (!isNaN(dbTime) && dbTime > lastProcessTime) {
+        lastProcessTime = dbTime;
+        console.log(`[Init] Set lastProcessTime from DB: ${new Date(dbTime).toISOString()}`);
+      }
+    }
+  } catch (err) {
+    console.error("[Init] Error loading lastProcessTime:", err.message);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 //  MAIN LOOP
 // ─────────────────────────────────────────────────────────────
@@ -287,6 +310,9 @@ async function main() {
   console.log("  Jalan di Termux/PM2 tanpa browser");
   console.log("═══════════════════════════════════════════");
 
+
+  // Load latest process_time from DB to keep ordering sequential across restarts
+  await initLastProcessTime();
 
   let loopCount = 0;
 
