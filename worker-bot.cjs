@@ -454,14 +454,14 @@ async function workerBotOneTick(botName) {
     let reactionDelayMs = 2000 + Math.random() * 3000;
     let checkDelayMs = 4000 + Math.random() * 5000;
 
-    // Jika banyak antrean, bot lebih cepat tapi kadang "ngalah"
+    // Jika banyak antrean, bot lebih cepat dan sangat jarang "ngalah"
     if (validList.length >= 3) {
-      if (Math.random() < 0.4) {
+      if (Math.random() < 0.1) { // 10% chance to ngalah
         console.log(`[WorkerBot][${botName}] Antrean panjang, ngalah dulu...`);
         return { backlog: validList.length, processed: false };
       }
-      reactionDelayMs = 800 + Math.random() * 1200;
-      checkDelayMs = 1200 + Math.random() * 1500;
+      reactionDelayMs = 400 + Math.random() * 800; // reaksi cepat
+      checkDelayMs = 600 + Math.random() * 900;    // cek cepat
       console.log(`[WorkerBot][${botName}] Mode cepat (Backlog: ${validList.length})`);
     }
 
@@ -554,14 +554,14 @@ async function workerBotLoop(botName) {
       const backlog = result?.backlog || 0;
 
       if (backlog >= 3) {
-        // Banyak antrean: 0.5-1.5 detik
-        idleMs = 500 + Math.random() * 1000;
+        // Banyak antrean: sangat cepat lanjut
+        idleMs = 200 + Math.random() * 400;
       } else if (backlog > 0) {
-        // Antrean sedang: 2-5 detik
-        idleMs = 2000 + Math.random() * 3000;
+        // Antrean sedang: agak cepat
+        idleMs = 1000 + Math.random() * 1500;
       } else {
-        // Kosong: 8-15 detik
-        idleMs = 8000 + Math.random() * 7000;
+        // Kosong: santai
+        idleMs = 4000 + Math.random() * 5000;
       }
     }
 

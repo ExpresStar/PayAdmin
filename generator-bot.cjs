@@ -39,8 +39,8 @@ function getTrafficConfig() {
 
   if (isRamai) {
     return {
-      insertDelay: [1200, 2400], // 1.2s - 2.4s antar transaksi baru
-      processDelay: [4000, 9000],
+      insertDelay: [400, 1000], // 0.4s - 1.0s antar transaksi baru (super ramai)
+      processDelay: [2000, 5000],
     };
   } else {
     return {
@@ -153,15 +153,15 @@ function generateSmartTransaction(pendingCount) {
 
   let processDelay = cfg.processDelay[0] + Math.random() * (cfg.processDelay[1] - cfg.processDelay[0]);
 
-  // Jarak process_time berdasarkan jumlah nota pending
+  // Jarak process_time berdasarkan jumlah nota pending (dipercepat agar tidak kelamaan)
   if (pendingCount < 50) {
-    processDelay += 60000 + Math.random() * 240000; // 1-5 menit
+    processDelay += 20000 + Math.random() * 40000; // 20-60 detik
   } else if (pendingCount < 90) {
-    processDelay += 60000 + Math.random() * 120000; // 1-3 menit
+    processDelay += 10000 + Math.random() * 20000; // 10-30 detik
   } else if (pendingCount < 100) {
-    processDelay += 20000 + Math.random() * 30000;  // 20-50 detik
+    processDelay += 5000 + Math.random() * 10000;  // 5-15 detik
   } else {
-    processDelay += Math.random() * 5000;            // banjir: sangat cepat
+    processDelay += Math.random() * 2000;            // banjir: sangat cepat
   }
 
   let targetProcess = lastTime + processDelay;

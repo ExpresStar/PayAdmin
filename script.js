@@ -2573,17 +2573,17 @@ function generateSmartTransaction(pendingCount) {
 
   // Jarak waktu pengerjaan (process_time) diatur berdasarkan jumlah nota pending (pendingCount)
   if (pendingCount < 50) {
-    // Nota sedikit (0-49): waktu loncat 1 sampai 5 menit
-    processDelay += 60000 + Math.random() * 240000; 
+    // Nota sedikit (0-49): waktu loncat 20-60 detik
+    processDelay += 20000 + Math.random() * 40000; 
   } else if (pendingCount < 90) {
-    // Nota pertengahan (50-89): waktu loncat 1 sampai 3 menit
-    processDelay += 60000 + Math.random() * 120000;
+    // Nota pertengahan (50-89): waktu loncat 10-30 detik
+    processDelay += 10000 + Math.random() * 20000;
   } else if (pendingCount < 100) {
-    // Nota mulai padat (90-99): waktu loncat puluhan detik (20 - 50 detik)
-    processDelay += 20000 + Math.random() * 30000;
+    // Nota mulai padat (90-99): waktu loncat 5-15 detik
+    processDelay += 5000 + Math.random() * 10000;
   } else {
     // Banjir nota (>= 100): proses cepat, hanya delay bawaan (cfg.processDelay) atau ditambah sangat sedikit
-    processDelay += Math.random() * 5000;
+    processDelay += Math.random() * 2000;
   }
 
   let targetProcess = lastTime + processDelay;
