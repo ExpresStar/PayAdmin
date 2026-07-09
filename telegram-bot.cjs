@@ -414,12 +414,22 @@ async function forwardToTelegram(msg) {
     // OLD: Absensi summary (legacy fallback)
     if (html.includes("absensi-box") || html.includes("Check-in")) {
       const formatted = formatBotSummary(html);
+      
+      let actionText = "Update Status";
+      let emoji = "📋";
+      const actionMatch = html.match(/data-action="([^"]+)"/);
+      if (actionMatch) {
+         actionText = actionMatch[1];
+         emoji = actionText.includes("Masuk") ? "✅" : actionText.includes("WC") ? "🚽" : actionText.includes("Makan") ? "🍜" : actionText.includes("Pulang") ? "🏁" : "📋";
+      }
+
       const text =
         `╔════════════════════════╗\n` +
         `         933PAY\n` +
         `╚════════════════════════╝\n\n` +
-        `【考勤：状态】 (Status Absensi)\n\n` +
+        `【考勤：手动】 (Absen Manual)\n\n` +
         `姓名   │ ${username}\n` +
+        `操作   │ ${emoji} ${actionText}\n` +
         `时间   │ ${timeStr} WIB\n\n` +
         `${formatted}\n\n` +
         `════════════════════════`;
@@ -440,16 +450,12 @@ async function forwardToTelegram(msg) {
   // ── ACTION TYPE (absensi tindakan: Masuk/WC/Makan/Pulang) ──
   if (type === "action") {
     const actionText = stripHtml(msg.message || "");
-    const emoji = actionText.includes("Masuk")
-      ? "✅"
-      : actionText.includes("WC")
-        ? "🚽"
-        : actionText.includes("Makan")
-          ? "🍜"
-          : actionText.includes("Pulang")
-            ? "🏁"
-            : "📋";
+    // Abaikan jika ini dari UI yang sudah digabung ke "absensi-box"
+    if (actionText.includes("Masuk") || actionText.includes("WC") || actionText.includes("Makan") || actionText.includes("Pulang")) {
+      return;
+    }
 
+    const emoji = "📋";
     const text =
       `╔════════════════════════╗\n` +
       `         933PAY\n` +

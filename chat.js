@@ -333,7 +333,7 @@ async function sendAction(text) {
 
   // Summary to Absensi room — simpan dengan username sendiri supaya hanya tampil ke user yg bersangkutan
   const summary = `
-  <div class="absensi-box">
+  <div class="absensi-box" data-action="${text}">
     <div class="absensi-title">📊 ${currentUser}'s Summary</div>
     <div class="absensi-row masuk"><span>Check-in</span> <span>${absensiState.masuk || "—"}</span></div>
     <div class="absensi-row wc"><span>WC Break</span> <span>${absensiState.wc}x</span></div>
