@@ -670,8 +670,14 @@ async function botSendRejectSequence(
   };
   const txStatus = statusMap[tx.status] || "待处理";
 
+  let bottomErrors = [];
+  if (mismatch.wrongNominal) bottomErrors.push(".bil");
+  else if (mismatch.wrongBank) bottomErrors.push(".bank");
+  else if (mismatch.wrongName) bottomErrors.push(".name");
+  const bottomText = bottomErrors[0] || ".unknown";
+
   // Teks selalu menggunakan Main Layout
-  const msgText = `╭────────────────────────╮\n         933PAY\n╰────────────────────────╯\n\n【存款订单】\n\n订单号 │ ${tx.transaction_id || tx.id}\n金额   │ ${fmtAmount(tx.amount || 0)} VND\n\n银行   │ ${shortBank(tx.bank_name || "")}\n姓名   │ ${tx.account_name || ""}\n账号   │ ${tx.account_number || ""}\n\n状态   │ ${txStatus}\n\n────────────────────────\n\n.bank   .name   .bil`;
+  const msgText = `╭────────────────────────╮\n         933PAY\n╰────────────────────────╯\n\n【存款订单】\n\n订单号 │ ${tx.transaction_id || tx.id}\n金额   │ ${fmtAmount(tx.amount || 0)} VND\n\n银行   │ ${shortBank(tx.bank_name || "")}\n姓名   │ ${tx.account_name || ""}\n账号   │ ${tx.account_number || ""}\n\n状态   │ ${txStatus}\n\n────────────────────────\n\n${bottomText}`;
   
   const captionHtml = `<pre style="font-family: 'Courier New', Courier, monospace; margin: 0; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; color: #fff;">${msgText}</pre>`;
 

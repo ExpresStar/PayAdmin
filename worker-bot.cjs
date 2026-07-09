@@ -166,30 +166,26 @@ function getTxMismatch(tx) {
 //  Telegram-bot.cjs akan forward ke Telegram secara otomatis
 // ─────────────────────────────────────────────────────────────
 
-let createCanvas;
+let PImage;
+let fnt;
 try {
-  const canvasMod = require("canvas");
-  createCanvas = canvasMod.createCanvas;
+  PImage = require("pureimage");
+  fnt = PImage.registerFont("simsunb.ttf", "sans-serif");
+  fnt.loadSync();
 } catch (err) {
-  console.warn("[WorkerBot] Canvas module not found, screenshots will be disabled.");
+  console.warn("[WorkerBot] PureImage module or font not found, screenshots disabled.");
 }
 
 function drawRoundedRect(ctx, x, y, w, h, r) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + w, y, x + w, y + h, radius);
-  ctx.arcTo(x + w, y + h, x, y + h, radius);
-  ctx.arcTo(x, y + h, x, y, radius);
-  ctx.arcTo(x, y, x + w, y, radius);
-  ctx.closePath();
+  // PureImage doesn't support arcTo perfectly, so we just draw a normal rect
+  ctx.fillRect(x, y, w, h);
 }
 
 function renderRejectScreenshotCanvas(tx, mismatch, botName) {
-  if (!createCanvas) return null;
+  if (!PImage || !fnt) return null;
   const W = 1100;
   const H = 160;
-  const canvas = createCanvas(W, H);
+  const canvas = PImage.make(W, H);
   const ctx = canvas.getContext("2d");
 
   // Outer background
@@ -335,7 +331,13 @@ function renderRejectScreenshotCanvas(tx, mismatch, botName) {
 }
 
 async function uploadCanvasAsChatImage(canvas, fileName) {
-  const buffer = canvas.toBuffer("image/png");
+  const stream = require("stream");
+  const pass = new stream.PassThrough();
+  const chunks = [];
+  pass.on("data", chunk => chunks.push(chunk));
+  
+  await PImage.encodePNGToStream(canvas, pass);
+  const buffer = Buffer.concat(chunks);
   const filePath = `chat_images/${fileName}`;
 
   const { error: uploadError } = await sb.storage
