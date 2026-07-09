@@ -427,11 +427,11 @@ async function workerBotOneTick(botName) {
 
   try {
     // 1. Ambil transaksi Pending dari DUA HARI (kemarin & hari ini)
-    //    Bot dibagi tugas berdasarkan index: genap → prioritas kemarin, ganjil → prioritas hari ini
+    //    SEMUA bot aktif: prioritas nota kemarin dulu (habiskan backlog), baru hari ini
     const todayStr = getLocalDate();
     const startOfToday = new Date(todayStr + "T00:00:00").toISOString();
 
-    // Hitung startOfYesterday: mundur 1 hari (UTC-adjusted)
+    // Hitung startOfYesterday: mundur 1 hari (WIB-aware)
     const wibNow = new Date(Date.now() + 7 * 3600000);
     const yesterdayWib = new Date(wibNow);
     yesterdayWib.setUTCDate(yesterdayWib.getUTCDate() - 1);
@@ -439,10 +439,6 @@ async function workerBotOneTick(botName) {
     const ym = String(yesterdayWib.getUTCMonth() + 1).padStart(2, "0");
     const yd = String(yesterdayWib.getUTCDate()).padStart(2, "0");
     const startOfYesterday = new Date(`${yy}-${ym}-${yd}T00:00:00`).toISOString();
-
-    // Tentukan bucket prioritas bot berdasarkan posisi di WORKERS array
-    const botIdx = WORKERS.indexOf(botName);
-    const prioritizeOld = (botIdx % 2 === 0); // genap → kemarin, ganjil → hari ini
 
     // Fetch semua pending 2 hari terakhir (limit 50 agar backlog besar tertangkap)
     const { data: pendingList, error } = await sb
@@ -464,14 +460,12 @@ async function workerBotOneTick(botName) {
     const bucketOld   = pendingList.filter(tx => tx.created_at < startOfToday);
     const bucketToday = pendingList.filter(tx => tx.created_at >= startOfToday);
 
-    // Tentukan urutan coba bucket sesuai prioritas bot
-    const buckets = prioritizeOld
-      ? [bucketOld, bucketToday]    // genap: kemarin dulu, hari ini fallback
-      : [bucketToday, bucketOld];   // ganjil: hari ini dulu, kemarin fallback
+    // SEMUA bot: coba kemarin dulu, kalau sudah habis baru hari ini
+    const buckets = [bucketOld, bucketToday];
 
     const nowMs = Date.now();
 
-    // Filter process_time sudah terlewat pada bucket pilihan (coba primer dulu, lalu fallback)
+    // Filter process_time sudah terlewat — coba bucket kemarin dulu, fallback ke hari ini
     let validList = [];
     for (const bucket of buckets) {
       const filtered = bucket.filter(tx => {
