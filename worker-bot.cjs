@@ -166,7 +166,13 @@ function getTxMismatch(tx) {
 //  Telegram-bot.cjs akan forward ke Telegram secara otomatis
 // ─────────────────────────────────────────────────────────────
 
-const { createCanvas } = require("canvas");
+let createCanvas;
+try {
+  const canvasMod = require("canvas");
+  createCanvas = canvasMod.createCanvas;
+} catch (err) {
+  console.warn("[WorkerBot] Canvas module not found, screenshots will be disabled.");
+}
 
 function drawRoundedRect(ctx, x, y, w, h, r) {
   const radius = Math.min(r, w / 2, h / 2);
@@ -180,6 +186,7 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
 }
 
 function renderRejectScreenshotCanvas(tx, mismatch, botName) {
+  if (!createCanvas) return null;
   const W = 1100;
   const H = 160;
   const canvas = createCanvas(W, H);
