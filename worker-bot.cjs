@@ -860,6 +860,15 @@ async function sendAbsensi(botName, shiftName, type, count = 0) {
   }
 }
 
+function getCurrentWIB() {
+  const now = new Date();
+  const wibTimeMs = now.getTime() + (7 * 60 * 60 * 1000);
+  const wibDate = new Date(wibTimeMs);
+  const hh = String(wibDate.getUTCHours()).padStart(2, "0");
+  const mm = String(wibDate.getUTCMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 async function doPulang(botName, shiftName) {
   const nowMs = Date.now();
   // Ambil rentang 12.5 jam ke belakang untuk mencakup seluruh shift
@@ -871,11 +880,17 @@ async function doPulang(botName, shiftName) {
 }
 
 function checkAttendanceCron() {
-  const d = new Date();
-  const wibTime = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
-  const h = wibTime.getHours();
-  const m = wibTime.getMinutes();
-  const todayStr = d.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" }); // YYYY-MM-DD
+  const now = new Date();
+  const wibTimeMs = now.getTime() + (7 * 60 * 60 * 1000);
+  const wibDate = new Date(wibTimeMs);
+  
+  const h = wibDate.getUTCHours();
+  const m = wibDate.getUTCMinutes();
+  
+  const yyyy = wibDate.getUTCFullYear();
+  const mm = String(wibDate.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(wibDate.getUTCDate()).padStart(2, "0");
+  const todayStr = `${yyyy}-${mm}-${dd}`;
 
   // Jendela Absen: Menit ke 55-59 sebelum jam, atau menit ke 00-05 pada jam pas
   const isMorningWindow = (h === 7 && m >= 55) || (h === 8 && m <= 5);
