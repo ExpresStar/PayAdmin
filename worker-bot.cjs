@@ -426,18 +426,33 @@ async function workerBotOneTick(botName) {
   const isRakus = (myCount > minPeerCount + 2); // lebih banyak 3 nota dari yg paling sedikit
 
   try {
-    // 1. Ambil transaksi Pending TERTUA yang belum diklaim
+    // 1. Ambil transaksi Pending dari DUA HARI (kemarin & hari ini)
+    //    Bot dibagi tugas berdasarkan index: genap → prioritas kemarin, ganjil → prioritas hari ini
     const todayStr = getLocalDate();
     const startOfToday = new Date(todayStr + "T00:00:00").toISOString();
 
+    // Hitung startOfYesterday: mundur 1 hari (UTC-adjusted)
+    const wibNow = new Date(Date.now() + 7 * 3600000);
+    const yesterdayWib = new Date(wibNow);
+    yesterdayWib.setUTCDate(yesterdayWib.getUTCDate() - 1);
+    const yy = yesterdayWib.getUTCFullYear();
+    const ym = String(yesterdayWib.getUTCMonth() + 1).padStart(2, "0");
+    const yd = String(yesterdayWib.getUTCDate()).padStart(2, "0");
+    const startOfYesterday = new Date(`${yy}-${ym}-${yd}T00:00:00`).toISOString();
+
+    // Tentukan bucket prioritas bot berdasarkan posisi di WORKERS array
+    const botIdx = WORKERS.indexOf(botName);
+    const prioritizeOld = (botIdx % 2 === 0); // genap → kemarin, ganjil → hari ini
+
+    // Fetch semua pending 2 hari terakhir (limit 50 agar backlog besar tertangkap)
     const { data: pendingList, error } = await sb
       .from("transactions")
       .select("id,transaction_id,order_id,account_number,account_name,bank_name,amount,created_at,process_time,status")
       .eq("status", "Pending")
       .is("assigned_to", null)
-      .gte("created_at", startOfToday)
+      .gte("created_at", startOfYesterday)
       .order("created_at", { ascending: true })
-      .limit(20);
+      .limit(50);
 
     if (error) {
       console.error(`[WorkerBot][${botName}] fetch error:`, error.message);
@@ -445,20 +460,36 @@ async function workerBotOneTick(botName) {
     }
     if (!pendingList || pendingList.length === 0) return { backlog: 0, processed: false };
 
-    // Filter: hanya transaksi yang process_time sudah terlewat
-    const nowMs = Date.now();
-    const validList = pendingList.filter(tx => {
-      if (!tx.process_time) return true;
-      const ptStr = tx.process_time.endsWith("Z") ? tx.process_time : tx.process_time + "Z";
-      const pt = new Date(ptStr);
-      return nowMs >= pt.getTime();
-    });
+    // Pisahkan menjadi dua bucket: kemarin vs hari ini
+    const bucketOld   = pendingList.filter(tx => tx.created_at < startOfToday);
+    const bucketToday = pendingList.filter(tx => tx.created_at >= startOfToday);
 
-    if (validList.length === 0) {
-      return { backlog: 0, processed: false };
+    // Tentukan urutan coba bucket sesuai prioritas bot
+    const buckets = prioritizeOld
+      ? [bucketOld, bucketToday]    // genap: kemarin dulu, hari ini fallback
+      : [bucketToday, bucketOld];   // ganjil: hari ini dulu, kemarin fallback
+
+    const nowMs = Date.now();
+
+    // Filter process_time sudah terlewat pada bucket pilihan (coba primer dulu, lalu fallback)
+    let validList = [];
+    for (const bucket of buckets) {
+      const filtered = bucket.filter(tx => {
+        if (!tx.process_time) return true;
+        const ptStr = tx.process_time.endsWith("Z") ? tx.process_time : tx.process_time + "Z";
+        return nowMs >= new Date(ptStr).getTime();
+      });
+      if (filtered.length > 0) { validList = filtered; break; }
     }
 
-    // Pilih random dari top 5 yang sudah matang
+    if (validList.length === 0) {
+      return { backlog: pendingList.length, processed: false };
+    }
+
+    const bucketLabel = (validList[0].created_at < startOfToday) ? "kemarin" : "hari ini";
+    console.log(`[WorkerBot][${botName}] Bucket: ${bucketLabel} | Valid: ${validList.length}/${pendingList.length}`);
+
+    // Pilih random dari top 5 yang sudah matang di bucket terpilih
     const topValid = validList.slice(0, 5);
     const tx = topValid[Math.floor(Math.random() * topValid.length)];
 
