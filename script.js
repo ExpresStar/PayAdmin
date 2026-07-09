@@ -1119,7 +1119,7 @@ function renderTable(rows) {
       const isActive = statusLower !== "completed" && statusLower !== "failed";
 
       const confirmBtn =
-        isActive
+        pastProcess && isActive
           ? `<button class="abtn abtn-confirm" onclick="openConfirm('${uid}')">✓ 确认</button>`
           : "";
       const rejectBtn = isActive
