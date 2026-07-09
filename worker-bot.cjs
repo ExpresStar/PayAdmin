@@ -583,6 +583,14 @@ async function workerBotLoop(botName) {
       continue;
     }
 
+    // Check break status
+    const onBreak = await handleBotBreakTick(botName);
+    if (onBreak) {
+      // Sedang istirahat: tidur 15 detik sebelum tick berikutnya
+      await new Promise(r => setTimeout(r, 15000));
+      continue;
+    }
+
     const result = await workerBotOneTick(botName);
     let idleMs;
 
@@ -684,6 +692,107 @@ async function loadWorkerRoster() {
 // ─────────────────────────────────────────────────────────────
 
 const absensiState = { lastMasuk: {}, lastPulang: {} };
+
+const botBreakStates = {};
+
+function getActiveBreaksCount() {
+  let count = 0;
+  for (const botName in botBreakStates) {
+    if (botBreakStates[botName].status !== null && isWorkerOnShift(botName)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+async function sendTelegramAbsensiMessage(botName, text, type = "action") {
+  try {
+    await sb.from("messages").insert([{
+      room: "absensi",
+      username: botName,
+      type: type,
+      message: type === "action" ? `<i>${text}</i>` : text
+    }]);
+  } catch (err) {
+    console.error(`[WorkerBot][${botName}] Error sending absensi message:`, err.message);
+  }
+}
+
+async function handleBotBreakTick(botName) {
+  const sInfo = WORKER_SHIFTS[botName];
+  const isPagi = sInfo ? sInfo.start === 8 : true;
+  const shiftKey = `${getLocalDate()}_${isPagi ? "pagi" : "malam"}`;
+
+  // Initialize break state if empty or new shift
+  if (!botBreakStates[botName] || botBreakStates[botName].shiftKey !== shiftKey) {
+    botBreakStates[botName] = {
+      shiftKey,
+      status: null,
+      returnTime: 0,
+      lastBreakTime: 0,
+      checklist: {
+        wc: Math.floor(1 + Math.random() * 2), // 1 atau 2 WC breaks per shift
+        makan: 1 // 1 Meal break per shift
+      },
+      // Break check pertama 45-90 menit dari awal shift/startup
+      nextScheduledCheck: Date.now() + (45 + Math.random() * 45) * 60 * 1000
+    };
+  }
+
+  const state = botBreakStates[botName];
+  const now = Date.now();
+
+  // Scenario 1: Sedang break
+  if (state.status !== null) {
+    if (now >= state.returnTime) {
+      const oldStatus = state.status;
+      state.status = null;
+      state.lastBreakTime = now;
+      
+      const returnLabel = oldStatus === "wc" ? "Kembali dari WC" : "Kembali, lanjut kerja";
+      console.log(`[WorkerBot][${botName}] Return to work from ${oldStatus}`);
+      
+      await sendTelegramAbsensiMessage(botName, returnLabel, "action");
+      
+      // Jadwalkan break berikutnya 1.5 - 2.5 jam lagi
+      state.nextScheduledCheck = now + (90 + Math.random() * 60) * 60 * 1000;
+    }
+    return true; // Skip kerjaan
+  }
+
+  // Scenario 2: Sedang kerja, cek apakah sudah waktunya break
+  if (now >= state.nextScheduledCheck) {
+    let chosenType = null;
+    if (state.checklist.makan > 0) {
+      chosenType = "makan";
+    } else if (state.checklist.wc > 0) {
+      chosenType = "wc";
+    }
+
+    if (chosenType !== null) {
+      const activeBreaks = getActiveBreaksCount();
+      // Aturan pembatasan: Maksimal 2 bot yang boleh break bersamaan per shift
+      if (activeBreaks < 2) {
+        state.status = chosenType;
+        const durationMs = chosenType === "wc" ? 15 * 60 * 1000 : 30 * 60 * 1000;
+        state.returnTime = now + durationMs;
+        state.checklist[chosenType]--;
+
+        const startLabel = chosenType === "wc" ? "Ke WC dulu (15 menit)" : "Istirahat Makan (30 menit)";
+        console.log(`[WorkerBot][${botName}] Starting break: ${chosenType}`);
+
+        await sendTelegramAbsensiMessage(botName, startLabel, "action");
+        return true; // Skip kerjaan
+      } else {
+        // Batas maksimum tercapai, tunda pengecekan bot ini selama 5 menit
+        console.log(`[WorkerBot][${botName}] Ingin break (${chosenType}) tapi sudah ada 2 bot yang break. Menunggu standby...`);
+        state.nextScheduledCheck = now + 5 * 60 * 1000;
+      }
+    }
+  }
+
+  return false;
+}
 
 async function getShiftNoteCount(botName, startIso, endIso) {
   try {
