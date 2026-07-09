@@ -241,7 +241,7 @@ async function autoInsertTransaction() {
 //  BOT STATUS — sync dengan DB (banks table SYSTEM_BOT row)
 // ─────────────────────────────────────────────────────────────
 
-let isBotRunning = true; // default: jalan terus
+let isBotRunning = false; // default: mati sampai di-ON dari UI
 
 async function checkBotStatus() {
   try {
@@ -258,11 +258,11 @@ async function checkBotStatus() {
     // Kalau row "OFFLINE", berarti tidak ada browser yang nyala — kita yang ambil alih
 
     if (data && data.length > 0) {
-      // Ada browser yang nyala — kita tetap jalan tapi lebih lambat
-      // agar tidak double-insert terlalu banyak
+      // UI switch is ON
       isBotRunning = true;
     } else {
-      isBotRunning = true;
+      // UI switch is OFF
+      isBotRunning = false;
     }
   } catch (err) {
     // silent
@@ -283,7 +283,7 @@ async function main() {
 
   while (true) {
     if (!isBotRunning) {
-      await sleep(10000);
+      await sleep(2000); // Check every 2 seconds when OFF
       await checkBotStatus();
       continue;
     }
