@@ -2,6 +2,8 @@
   "name": "bot",
   "type": "module",
   "dependencies": {
-    "@supabase/supabase-js": "^2.0.0"
+    "@supabase/supabase-js": "^2.0.0",
+    "canvas": "^3.2.3",
+    "pureimage": "^0.4.18"
   }
 }

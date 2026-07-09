@@ -166,6 +166,181 @@ function getTxMismatch(tx) {
 //  Telegram-bot.cjs akan forward ke Telegram secara otomatis
 // ─────────────────────────────────────────────────────────────
 
+const { createCanvas } = require("canvas");
+
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+}
+
+function renderRejectScreenshotCanvas(tx, mismatch, botName) {
+  const W = 1100;
+  const H = 160;
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext("2d");
+
+  // Outer background
+  ctx.fillStyle = "#f1f5f9";
+  ctx.fillRect(0, 0, W, H);
+
+  // Table header row
+  const HDR_H = 32;
+  ctx.fillStyle = "#f8fafc";
+  ctx.fillRect(0, 0, W, HDR_H);
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, HDR_H); ctx.lineTo(W, HDR_H);
+  ctx.stroke();
+
+  // Header labels
+  const HDR_FONT = "bold 10px sans-serif";
+  ctx.font = HDR_FONT;
+  ctx.fillStyle = "#6b7280";
+  const COLS = [
+    { label: "交易编号",   x:  18 },
+    { label: "订单编号",   x: 195 },
+    { label: "账户号码",   x: 340 },
+    { label: "金额",       x: 480 },
+    { label: "账户姓名",   x: 610 },
+    { label: "银行",       x: 740 },
+    { label: "状态",       x: 810 },
+    { label: "创建时间",   x: 900 },
+    { label: "处理时间",   x: 1010 },
+  ];
+  COLS.forEach(c => ctx.fillText(c.label, c.x, HDR_H - 10));
+
+  // Data row
+  const ROW_Y  = HDR_H;
+  const ROW_H  = H - HDR_H;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, ROW_Y, W, ROW_H);
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, H - 1); ctx.lineTo(W, H - 1);
+  ctx.stroke();
+
+  const midY = ROW_Y + ROW_H / 2;
+
+  // Checkbox placeholder
+  ctx.strokeStyle = "#d1d5db";
+  ctx.lineWidth = 1;
+  drawRoundedRect(ctx, 4, midY - 6, 12, 12, 2);
+  ctx.stroke();
+
+  // TX ID
+  const txId   = String(tx.transaction_id || "");
+  const txIdA  = txId.slice(0, 16);
+  const txIdB  = txId.slice(16);
+  ctx.font = "bold 11px monospace";
+  ctx.fillStyle = mismatch.wrongNominal ? "#dc2626" : "#3b82f6";
+  ctx.fillText(txIdA, COLS[0].x, midY - 5);
+  ctx.font = "normal 9px monospace";
+  ctx.fillStyle = "#9ca3af";
+  ctx.fillText(txIdB, COLS[0].x, midY + 8);
+
+  // Order ID
+  const ordId  = String(tx.order_id || "");
+  ctx.font = "normal 10px sans-serif";
+  ctx.fillStyle = "#6b7280";
+  ctx.fillText(ordId.slice(0, 14), COLS[1].x, midY - 3);
+  if (ordId.length > 14) {
+    ctx.font = "normal 9px sans-serif";
+    ctx.fillText(ordId.slice(14), COLS[1].x, midY + 9);
+  }
+
+  // Acc Number
+  ctx.font = "normal 11px monospace";
+  ctx.fillStyle = "#374151";
+  ctx.fillText(String(tx.account_number || ""), COLS[2].x, midY + 3);
+
+  // Amount
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillStyle = mismatch.wrongNominal ? "#dc2626" : "#1d4ed8";
+  const amtText = fmtAmount(tx.amount || 0);
+  ctx.fillText(amtText, COLS[3].x, midY + 3);
+
+  // Account Name
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillStyle = mismatch.wrongName ? "#dc2626" : "#6366f1";
+  ctx.fillText(String(tx.account_name || ""), COLS[4].x, midY + 3);
+
+  // Bank (badge)
+  const bankShortText = shortBank(tx.bank_name || "");
+  const BADGE_BG  = mismatch.wrongBank ? "#fef2f2" : "#f0f9ff";
+  const BADGE_BDR = mismatch.wrongBank ? "#fca5a5" : "#bae6fd";
+  const BADGE_TXT = mismatch.wrongBank ? "#dc2626" : "#0369a1";
+  const bw = ctx.measureText(bankShortText).width + 14;
+  ctx.fillStyle = BADGE_BG;
+  drawRoundedRect(ctx, COLS[5].x, midY - 9, bw, 17, 3);
+  ctx.fill();
+  ctx.strokeStyle = BADGE_BDR;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = BADGE_TXT;
+  ctx.font = "bold 10px sans-serif";
+  ctx.fillText(bankShortText, COLS[5].x + 7, midY + 3);
+
+  // Status
+  const statusText = String(tx.status || "Pending");
+  ctx.font = "bold 10px sans-serif";
+  const sw = ctx.measureText(statusText).width + 16;
+  ctx.fillStyle = "#fffbeb";
+  drawRoundedRect(ctx, COLS[6].x, midY - 9, sw, 17, 8);
+  ctx.fill();
+  ctx.strokeStyle = "#f59e0b";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = "#b45309";
+  ctx.fillText(statusText, COLS[6].x + 8, midY + 3);
+
+  // Time
+  function fmtDateShort(iso) {
+    if (!iso) return "—";
+    const safeIso = String(iso).endsWith('Z') ? iso : iso + 'Z';
+    const d = new Date(safeIso);
+    const ymd = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Jakarta' });
+    const hms = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour12: false });
+    return { ymd, hms };
+  }
+  const cr = fmtDateShort(tx.created_at);
+  ctx.font = "normal 9px sans-serif";
+  ctx.fillStyle = "#6b7280";
+  ctx.fillText(cr.ymd, COLS[7].x, midY - 3);
+  ctx.fillText(cr.hms, COLS[7].x, midY + 9);
+
+  const pt = fmtDateShort(tx.process_time || tx.created_at);
+  ctx.fillText(pt.ymd, COLS[8].x, midY - 3);
+  ctx.fillText(pt.hms, COLS[8].x, midY + 9);
+
+  // Highlight bar
+  ctx.fillStyle = "#ef4444";
+  ctx.fillRect(0, ROW_Y, 3, ROW_H);
+
+  return canvas;
+}
+
+async function uploadCanvasAsChatImage(canvas, fileName) {
+  const buffer = canvas.toBuffer("image/png");
+  const filePath = `chat_images/${fileName}`;
+
+  const { error: uploadError } = await sb.storage
+    .from("chat_images")
+    .upload(filePath, buffer, { contentType: "image/png" });
+  
+  if (uploadError) throw uploadError;
+
+  const { data } = sb.storage.from("chat_images").getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
 async function botSendRejectMessage(botName, tx, mismatch) {
   const statusMap = {
     Pending: "待处理", Processing: "处理中",
@@ -187,22 +362,32 @@ async function botSendRejectMessage(botName, tx, mismatch) {
     `────────────────────────\n\n` +
     `.bank   .name   .bil`;
 
-  const captionHtml =
-    `<pre style="font-family: 'Courier New', Courier, monospace; margin: 0; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; color: #fff;">${msgText}</pre>`;
+  const captionHtml = `<pre>${msgText}</pre>`;
 
-  // Delay manusiawi sebelum kirim
   await sleep(700 + Math.random() * 900);
 
-  // Kirim sebagai text message ke room reject
-  // (Tanpa screenshot karena di Node.js tidak ada Canvas)
-  await sb.from("messages").insert([{
-    room: "reject",
-    username: botName,
-    type: "bot",
-    message: captionHtml,
-  }]);
+  try {
+    const canvas = renderRejectScreenshotCanvas(tx, mismatch, botName);
+    const fileName = `reject-bot-${tx.id}-${Date.now()}.png`;
+    const imageUrl = await uploadCanvasAsChatImage(canvas, fileName);
 
-  console.log(`  [Reject] Sent reject message to chat for TX ${tx.transaction_id}`);
+    await sb.from("messages").insert([{
+      room: "reject",
+      username: botName,
+      type: "image",
+      message: `${imageUrl}|--CAPTION--|${captionHtml}`,
+    }]);
+
+    console.log(`  [Reject] Sent reject screenshot to chat for TX ${tx.transaction_id}`);
+  } catch (err) {
+    console.error(`  [Reject] Failed to send screenshot: ${err.message}, sending text fallback`);
+    await sb.from("messages").insert([{
+      room: "reject",
+      username: botName,
+      type: "bot",
+      message: captionHtml,
+    }]);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────

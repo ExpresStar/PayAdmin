@@ -352,9 +352,15 @@ function formatBotSummary(html) {
 }
 
 function formatBotReject(html) {
+  // Extract content inside <pre> if it exists to preserve ASCII art / boxes
+  const preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+  if (preMatch) {
+    const innerText = preMatch[1].replace(/<[^>]*>/g, "");
+    return `<pre>${innerText}</pre>`;
+  }
+  
   // Reject message format — take the full text, clean up
   const clean = stripHtml(html);
-  // If it has the dashed line box, format it
   if (clean.includes("TX") || clean.includes("Gagal")) {
     return clean;
   }
@@ -379,15 +385,10 @@ async function forwardToTelegram(msg) {
     const imgUrl = parts[0];
     const captionText = parts[1] || "";
 
-    // Detect consolidated reject format — caption is self-contained
-    let tgCaption;
-    if (captionText.includes("已拒绝") || captionText.includes("REJECTED")) {
-      tgCaption = captionText; // Already has header, body, bot name, time
-    } else {
-      tgCaption = `📸 <b>${username}</b>`;
-      if (captionText) tgCaption += `\n${captionText}`;
-      if (timeStr) tgCaption += `\n🕐 ${timeStr} WIB`;
-    }
+    // Always prepend bot/user name and time for context
+    let tgCaption = `🤖 <b>${username}</b>`;
+    if (captionText) tgCaption += `\n${captionText}`;
+    if (timeStr) tgCaption += `\n🕐 ${timeStr} WIB`;
 
     // Forward image as photo (handle URL + data URI)
     if (imgUrl) {
