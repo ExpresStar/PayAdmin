@@ -711,7 +711,6 @@ async function sendAbsensi(botName, shiftName, type, count = 0) {
     `时间   │ ${timeStr} WIB\n\n`;
 
   if (type === "pulang") {
-    msgText += `单数   │ ${count} (Total Nota)\n\n`;
     msgText += `════════════════════════\n\nTerima Kasih!`;
   } else {
     msgText += `════════════════════════\n\nSelamat Bekerja!`;
@@ -725,6 +724,27 @@ async function sendAbsensi(botName, shiftName, type, count = 0) {
     type: "bot",
     message: html
   }]);
+
+  // Jika Pulang, kirim pesan TERPISAH ke grup Laporan Nota (report)
+  if (type === "pulang") {
+    let reportText = 
+      `╔════════════════════════╗\n` +
+      `         933PAY\n` +
+      `╚════════════════════════╝\n\n` +
+      `【工作日报】 (Laporan Harian)\n\n` +
+      `姓名   │ ${botName}\n` +
+      `班次   │ ${shiftName}\n` +
+      `时间   │ ${timeStr} WIB\n\n` +
+      `单数   │ ${count} (Total Nota)\n\n` +
+      `════════════════════════\n\nKerja Bagus!`;
+
+    await sb.from("messages").insert([{
+      room: "report",
+      username: botName,
+      type: "bot",
+      message: `<pre>${reportText}</pre>`
+    }]);
+  }
 }
 
 async function doPulang(botName, shiftName) {

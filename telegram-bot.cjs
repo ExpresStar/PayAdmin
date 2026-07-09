@@ -44,9 +44,9 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 // Auto-detect berdasarkan nama grup.
 
 const CONFIG_PATH = path.join(__dirname, "telegram-groups.json");
-const ROOM_GROUPS = {}; // { worker: -100..., absensi: -100..., reject: -100... }
+const ROOM_GROUPS = {}; // { worker: -100..., absensi: -100..., reject: -100..., report: -100... }
 const GROUP_ROOMS = {}; // { -100...: "worker", ... }
-const DETECT_NAMES = { worker: "worker", absensi: "absensi", reject: "reject" };
+const DETECT_NAMES = { worker: "worker", absensi: "absensi", reject: "reject", report: "report" };
 
 let lastUpdateOffset = 0;
 const recentlyInserted = new Set(); // dedup loop
@@ -248,10 +248,12 @@ function matchRoomByGroupTitle(title) {
   if (t.includes("worker")) return "worker";
   if (t.includes("absensi")) return "absensi";
   if (t.includes("reject")) return "reject";
+  if (t.includes("report") || t.includes("laporan") || t.includes("harian")) return "report";
   // Chinese
   if (t.includes("工作人员")) return "worker";
   if (t.includes("考勤")) return "absensi";
   if (t.includes("驳回")) return "reject";
+  if (t.includes("工作日报") || t.includes("日报")) return "report";
   // Indonesian / mixed
   if (t.includes("pekerja")) return "worker";
   if (t.includes("tolak")) return "reject";
