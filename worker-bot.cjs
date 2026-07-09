@@ -19,7 +19,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 // ─────────────────────────────────────────────────────────────
 //  WORKER ROSTER + SHIFT CONFIG
 // ─────────────────────────────────────────────────────────────
-let WORKERS = ["yaer98", "xiaoting99", "anan88"];
+let WORKERS = ["yaer98", "xiaoting99", "bama98", "anan88", "xiaoyan", "xiaoxan"];
 
 const WORKER_SHIFTS = {};
 
@@ -637,22 +637,22 @@ async function loadWorkerRoster() {
   try {
     const { data, error } = await sb
       .from("workers")
-      .select("username, shift")
-      .eq("active", true);
+      .select("user_id, shift")
+      .eq("status", "active");
 
     if (error || !data || data.length === 0) return;
 
-    const newWorkers = data.map(w => w.username);
+    const newWorkers = data.map(w => w.user_id);
 
     // Update shift mapping
     for (const w of data) {
-      // Default shift mapping berdasarkan DB field
-      const shiftMap = {
-        pagi:  { start: 8,  end: 20 },
-        siang: { start: 8,  end: 20 }, // siang treated as pagi
-        malam: { start: 20, end: 8  },
-      };
-      WORKER_SHIFTS[w.username] = shiftMap[w.shift] || { start: 8, end: 20 };
+      const sLower = String(w.shift || "").toLowerCase();
+      let start = 8, end = 20;
+      if (sLower.includes("malam")) {
+        start = 20;
+        end = 8;
+      }
+      WORKER_SHIFTS[w.user_id] = { start, end };
     }
     
     // Assign default shifts for any hardcoded workers not in DB
