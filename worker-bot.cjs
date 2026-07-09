@@ -21,11 +21,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 // ─────────────────────────────────────────────────────────────
 let WORKERS = ["yaer98", "xiaoting99", "anan88"];
 
-const WORKER_SHIFTS = {
-  xiaoting99: { start: 8,  end: 16 }, // Shift pagi  08:00–16:00 WIB
-  yaer98:     { start: 12, end: 20 }, // Shift siang 12:00–20:00 WIB
-  anan88:     { start: 20, end: 4  }, // Shift malam 20:00–04:00 WIB
-};
+const WORKER_SHIFTS = {};
 
 // ─────────────────────────────────────────────────────────────
 //  HELPER FUNCTIONS
@@ -579,37 +575,38 @@ async function workerBotLoop(botName) {
   console.log(`[WorkerBot][${botName}] Loop started`);
 
   while (true) {
-    const result = await workerBotOneTick(botName);
     const onShift = isWorkerOnShift(botName);
 
-    let idleMs;
-
     if (!onShift) {
-      // Off-shift: cek setiap 90-150 detik
-      idleMs = 90000 + Math.random() * 60000;
-    } else {
-      const backlog = result?.backlog || 0;
-      const wasRakus = result?.isRakus || false;
-
-      if (wasRakus) {
-        // Habis ngalah/rakus: tidur panjang biar teman yg ambil
-        idleMs = 4000 + Math.random() * 4000;
-      } else if (backlog >= 15) {
-        // Banyak antrean (>= 15): sangat cepat lanjut
-        idleMs = 200 + Math.random() * 400;
-      } else if (backlog > 3) {
-        // Antrean sedang (> 3): lumayan cepat
-        idleMs = 1000 + Math.random() * 1500;
-      } else if (backlog > 0) {
-        // Antrean sedikit (1-3): normal
-        idleMs = 2000 + Math.random() * 3000;
-      } else {
-        // Kosong: santai
-        idleMs = 4000 + Math.random() * 5000;
-      }
+      // Off-shift: jangan memproses nota sama sekali, tidur 60 detik sebelum cek shift lagi
+      await new Promise(r => setTimeout(r, 60000));
+      continue;
     }
 
-    await sleep(idleMs);
+    const result = await workerBotOneTick(botName);
+    let idleMs;
+
+    const backlog = result?.backlog || 0;
+    const wasRakus = result?.isRakus || false;
+
+    if (wasRakus) {
+      // Habis ngalah/rakus: tidur panjang biar teman yg ambil
+      idleMs = 4000 + Math.random() * 4000;
+    } else if (backlog >= 15) {
+      // Banyak antrean (>= 15): sangat cepat lanjut
+      idleMs = 200 + Math.random() * 400;
+    } else if (backlog > 3) {
+      // Antrean sedang (> 3): lumayan cepat
+      idleMs = 1000 + Math.random() * 1500;
+    } else if (backlog > 0) {
+      // Antrean sedikit (1-3): normal
+      idleMs = 2000 + Math.random() * 3000;
+    } else {
+      // Kosong: santai
+      idleMs = 15000 + Math.random() * 5000;
+    }
+
+    await new Promise(r => setTimeout(r, idleMs));
   }
 }
 
@@ -649,16 +646,21 @@ async function loadWorkerRoster() {
 
     // Update shift mapping
     for (const w of data) {
-      if (!WORKER_SHIFTS[w.username]) {
-        // Default shift mapping berdasarkan DB field
-        const shiftMap = {
-          pagi:  { start: 8,  end: 20 },
-          siang: { start: 8,  end: 20 }, // siang treated as pagi
-          malam: { start: 20, end: 8  },
-        };
-        WORKER_SHIFTS[w.username] = shiftMap[w.shift] || { start: 8, end: 20 };
-      }
+      // Default shift mapping berdasarkan DB field
+      const shiftMap = {
+        pagi:  { start: 8,  end: 20 },
+        siang: { start: 8,  end: 20 }, // siang treated as pagi
+        malam: { start: 20, end: 8  },
+      };
+      WORKER_SHIFTS[w.username] = shiftMap[w.shift] || { start: 8, end: 20 };
     }
+    
+    // Assign default shifts for any hardcoded workers not in DB
+    WORKERS.forEach(bot => {
+      if (!WORKER_SHIFTS[bot]) {
+        WORKER_SHIFTS[bot] = { start: 8, end: 20 };
+      }
+    });
 
     // Detect new workers
     const added = newWorkers.filter(n => !WORKERS.includes(n));
