@@ -240,7 +240,8 @@ async function autoInsertTransaction() {
   if (error) {
     console.error("❌ INSERT ERROR:", error.message);
   } else {
-    console.log(`✅ TX ${tx.transaction_id} | ${tx.account_name} | ${tx.bank_name} | ${tx.amount}`);
+    const ptLocal = new Date(tx.process_time).toLocaleTimeString("en-GB", { timeZone: "Asia/Jakarta" });
+    console.log(`✅ TX ${tx.transaction_id} | ${tx.account_name} | ${tx.bank_name} | ${tx.amount} | Process: ${ptLocal}`);
   }
 }
 
