@@ -355,6 +355,12 @@ async function botSendRejectMessage(botName, tx, mismatch) {
   };
   const txStatus = statusMap[tx.status] || "待处理";
 
+  let bottomErrors = [];
+  if (mismatch.wrongBank) bottomErrors.push(".bank");
+  if (mismatch.wrongName) bottomErrors.push(".name");
+  if (mismatch.wrongNominal) bottomErrors.push(".bil");
+  const bottomText = bottomErrors.join("   ") || ".unknown";
+
   const msgText =
     `╭────────────────────────╮\n` +
     `         933PAY\n` +
@@ -367,7 +373,7 @@ async function botSendRejectMessage(botName, tx, mismatch) {
     `账号   │ ${tx.account_number || ""}\n\n` +
     `状态   │ ${txStatus}\n\n` +
     `────────────────────────\n\n` +
-    `.bank   .name   .bil`;
+    `${bottomText}`;
 
   const captionHtml = `<pre>${msgText}</pre>`;
 
