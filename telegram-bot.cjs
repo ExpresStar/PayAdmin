@@ -415,10 +415,15 @@ async function forwardToTelegram(msg) {
     if (html.includes("absensi-box") || html.includes("Check-in")) {
       const formatted = formatBotSummary(html);
       const text =
-        `🤖 <b>${username}</b>\n` +
-        `${formatted}\n` +
-        `🕐 ${timeStr} WIB`;
-      await sendToGroup(chatId, text);
+        `╔════════════════════════╗\n` +
+        `         933PAY\n` +
+        `╚════════════════════════╝\n\n` +
+        `【考勤：状态】 (Status Absensi)\n\n` +
+        `姓名   │ ${username}\n` +
+        `时间   │ ${timeStr} WIB\n\n` +
+        `${formatted}\n\n` +
+        `════════════════════════`;
+      await sendToGroup(chatId, `<pre>${text}</pre>`);
       return;
     }
 
@@ -446,11 +451,16 @@ async function forwardToTelegram(msg) {
             : "📋";
 
     const text =
-      `${emoji} <b>${username}</b>\n` +
-      `${actionText}\n` +
-      `🕐 ${timeStr} WIB`;
+      `╔════════════════════════╗\n` +
+      `         933PAY\n` +
+      `╚════════════════════════╝\n\n` +
+      `【考勤：手动】 (Absen Manual)\n\n` +
+      `姓名   │ ${username}\n` +
+      `操作   │ ${emoji} ${actionText}\n` +
+      `时间   │ ${timeStr} WIB\n\n` +
+      `════════════════════════`;
 
-    await sendToGroup(chatId, text);
+    await sendToGroup(chatId, `<pre>${text}</pre>`);
     return;
   }
 
