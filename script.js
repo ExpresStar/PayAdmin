@@ -760,8 +760,6 @@ async function systemAutoApproveTick() {
 
     if (approvedCount > 0) {
       console.log(`[System] Auto approved ${approvedCount} transaction(s).`);
-      loadTransactions();
-      loadDashboardStats();
     }
   } finally {
     _systemAutoApproveRunning = false;
@@ -782,14 +780,7 @@ let _workerBotsStarted = false;
 function startWorkerBots() {
   if (_workerBotsStarted) return;
   _workerBotsStarted = true;
-  console.log("[WorkerBot] Starting", WORKERS.length, "bots with shift schedules:",
-    WORKERS.map(n => `${n}(${WORKER_SHIFTS[n]?.start}:00–${WORKER_SHIFTS[n]?.end}:00)`).join(", "));
-
-  WORKERS.forEach((botName, idx) => {
-    // Stagger start: tiap bot mulai di waktu berbeda agar tidak serentak
-    const staggerMs = idx * (2000 + Math.random() * 4000);
-    setTimeout(() => workerBotLoop(botName), staggerMs);
-  });
+  console.log("🤖 [MIGRATED] Worker Bot sekarang jalan di Termux HP. Browser tidak menjalankan Worker lagi.");
 }
 
 async function workerBotOneTick(botName) {
@@ -917,13 +908,6 @@ async function workerBotOneTick(botName) {
       });
     }
 
-    // Refresh UI kalau halaman transactions sedang aktif
-    const activePage = document.querySelector(".page-section.active");
-    if (activePage && activePage.id === "page-transactions") {
-      loadTransactions();
-    }
-    loadDashboardStats();
-
     return { backlog: validList.length, processed: true };
 
   } catch (err) {
@@ -1022,8 +1006,8 @@ async function cleanupStuckClaims() {
 // Jalankan pembersihan otomatis setiap 10 detik di background
 setInterval(cleanupStuckClaims, 10000);
 
-async function loadTransactions() {
-  showTableLoading();
+async function loadTransactions(silent = false) {
+  if (!silent) showTableLoading();
 
   // Clean up stuck transactions (orphaned claims) automatically
   cleanupStuckClaims();
@@ -1731,7 +1715,6 @@ async function doConfirmClient() {
   });
 
   showNotice("交易确认成功！", "success");
-  loadTransactions();
 }
 
 // ─────────────────────────────────────────────────────
@@ -1834,7 +1817,6 @@ async function confirmReject() {
   });
 
   showNotice("交易已拒绝。", "error");
-  loadTransactions();
 }
 
 // ─────────────────────────────────────────────────────
@@ -2061,9 +2043,9 @@ function filterHistoryYesterday() {
   loadHistory();
 }
 
-async function loadHistory() {
+async function loadHistory(silent = false) {
   const tbody = document.getElementById("history-tbody");
-  if (tbody) {
+  if (!silent && tbody) {
     tbody.innerHTML = Array.from({ length: 8 })
       .map(
         () =>
@@ -2290,20 +2272,18 @@ async function loadBanks() {
     .join("");
 }
 
-sb.channel("banks-live")
-  .on(
-    "postgres_changes",
-    {
-      event: "*",
-      schema: "public",
-      table: "banks",
-    },
-    () => {
-      console.log("BANK UPDATED");
-      loadBanks();
-    },
-  )
-  .subscribe();
+function subscribeAppRealtime() {
+  sb.channel("transactions-live")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "transactions" },
+      () => {
+        loadTransactions(true);
+        loadHistory(true);
+      },
+    )
+    .subscribe();
+}
 
 // ─────────────────────────────────────────────────────
 //  INIT
@@ -3503,6 +3483,7 @@ async function loadDashboardStats() {
   document.getElementById("stat-failed-tx").textContent = failed;
 }
 
+let _realtimeDebounceTimer = null;
 function subscribeAppRealtime() {
   sb.channel("app-live")
     .on(
@@ -3513,14 +3494,18 @@ function subscribeAppRealtime() {
         table: "transactions",
       },
       () => {
-        loadDashboardStats();
+        // Gunakan Debounce agar tidak lag kalau ada ratusan update per detik
+        if (_realtimeDebounceTimer) clearTimeout(_realtimeDebounceTimer);
+        _realtimeDebounceTimer = setTimeout(() => {
+          loadDashboardStats();
 
-        const activeSect = document.querySelector(".page-section.active");
-        if (activeSect?.id === "page-transactions") {
-          loadTransactions();
-        } else if (activeSect?.id === "page-history") {
-          loadHistory();
-        }
+          const activeSect = document.querySelector(".page-section.active");
+          if (activeSect?.id === "page-transactions") {
+            loadTransactions(true);
+          } else if (activeSect?.id === "page-history") {
+            loadHistory(true);
+          }
+        }, 300); // Tunggu 300ms setelah update terakhir baru render UI
       },
     )
     .subscribe();
@@ -3645,53 +3630,7 @@ setInterval(systemAutoApproveTick, 5000);
 let _botLoopStarted = false;
 let _botLoopCount = 0;
 function startBotAutomationLoop() {
-  if (_botLoopStarted) {
-    console.log("🤖 Bot loop sudah berjalan, skip startBotAutomationLoop()");
-    return;
-  }
-  _botLoopStarted = true;
-  _botLoopCount = 0;
-  console.log("🤖 ===== BOT AUTOMATION LOOP DIMULAI =====");
-
-  async function loop() {
-    // Bot hanya berjalan kalau status RUNNING di DB
-    if (!isBotRunning) {
-      console.log("🤖 Bot tidak running, stop loop");
-      _botLoopStarted = false;
-      return;
-    }
-
-    _botLoopCount++;
-    const cfg = getTrafficConfig();
-    const delay =
-      cfg.insertDelay[0] +
-      Math.random() * (cfg.insertDelay[1] - cfg.insertDelay[0]);
-
-    try {
-      console.log(`🤖 [Loop #${_botLoopCount}] Insert nota baru... (delay=${Math.round(delay)}ms)`);
-      await autoInsertTransaction();
-    } catch (err) {
-      console.error("🤖 [Loop] autoInsertTransaction ERROR (loop tetap lanjut):", err);
-    }
-
-    try {
-      // Jalankan bot tanpa memblokir pembuatan nota selanjutnya
-      botProcessPendingTick().catch(err => {
-        console.error("🤖 [Loop] botProcessPendingTick ERROR:", err);
-      });
-    } catch (err) {
-      console.error("🤖 [Loop] botProcessPendingTick ERROR:", err);
-    }
-
-    // Jadwalkan loop berikutnya
-    if (isBotRunning) {
-      setTimeout(loop, delay);
-    } else {
-      console.log("🤖 Loop stopped. Bot status:", isBotRunning);
-      _botLoopStarted = false;
-    }
-  }
-  loop();
+  console.log("🤖 [MIGRATED] Generator Bot sekarang jalan di Termux HP. Browser tidak men-generate transaksi lagi.");
 }
 
 // ─────────────────────────────────────────────────────

@@ -277,8 +277,26 @@
 
       <!-- SETTINGS -->
       <section id="settings" class="page">
-        <div class="top"><h1>Pengaturan</h1></div>
-        <div class="card center">Pengaturan lanjutan masuk Week 2.</div>
+        <div class="top">
+          <div><h1>Pengaturan</h1><p class="muted">Pengaturan Sistem Lanjutan</p></div>
+        </div>
+        <div class="card" style="border:1px solid #fecaca; background:#fffbfb">
+          <h3 style="color:#dc2626; display:flex; align-items:center; gap:8px"><span style="font-size:24px">⚠️</span> Zona Berbahaya: Nuke Transaksi</h3>
+          <p style="margin:10px 0 20px; color:#ef4444; font-size:14px;">Hapus massal transaksi berdasarkan rentang waktu. <b>Tindakan ini tidak dapat dibatalkan!</b></p>
+          
+          <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap">
+            <div style="flex:1; min-width:200px">
+              <label style="display:block; margin-bottom:4px; font-size:12px; font-weight:bold; color:#7f1d1d">Dari Waktu</label>
+              <input type="datetime-local" id="nukeFrom" style="width:100%; padding:10px; border:1px solid #fca5a5; border-radius:6px; background:#fef2f2">
+            </div>
+            <div style="flex:1; min-width:200px">
+              <label style="display:block; margin-bottom:4px; font-size:12px; font-weight:bold; color:#7f1d1d">Sampai Waktu</label>
+              <input type="datetime-local" id="nukeTo" style="width:100%; padding:10px; border:1px solid #fca5a5; border-radius:6px; background:#fef2f2">
+            </div>
+          </div>
+          
+          <button onclick="nukeTransactions()" style="width:100%; padding:14px; background:#dc2626; color:white; border:none; border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(220,38,38,0.3)">🔥 NUKE TRANSAKSI SEKARANG</button>
+        </div>
       </section>
 
     </main>
@@ -904,6 +922,36 @@
       var res=await sb.from('shift_swaps').update({status:'approved',admin_approver:email,approved_at:new Date().toISOString()}).eq('id',id);
       if(res.error)return alertBox('shiftAlert',res.error.message,'error');
       alertBox('shiftAlert','Shift swap disetujui');loadShiftSwaps();
+    }
+
+    async function nukeTransactions() {
+      var f = document.getElementById('nukeFrom').value;
+      var t = document.getElementById('nukeTo').value;
+      if (!f || !t) return alert("Pilih rentang waktu (Dari & Sampai) terlebih dahulu!");
+      
+      var fromIso = new Date(f).toISOString();
+      var toIso = new Date(t).toISOString();
+
+      if (!confirm("⚠️ PERINGATAN KERAS ⚠️\n\nAnda akan menghapus SEMUA transaksi dari:\n" + f + "\nsampai:\n" + t + "\n\nApakah Anda YAKIN 100%?")) return;
+      if (!confirm("⚠️ KONFIRMASI TERAKHIR ⚠️\n\nTindakan ini TIDAK BISA dibatalkan. Data akan hilang permanen.\nKetik 'OK' jika setuju (atau biarkan kosong untuk batal).")) return;
+      
+      var resCheck = prompt("Ketik 'NUKE' untuk melanjutkan penghapusan massal:");
+      if (resCheck !== "NUKE") {
+        alert("Nuke dibatalkan.");
+        return;
+      }
+
+      // Supabase JS doesn't support bulk DELETE without a filter that matches existing records, 
+      // but we can delete using range filters.
+      try {
+        var res = await sb.from('transactions').delete().gte('created_at', fromIso).lte('created_at', toIso);
+        if (res.error) throw res.error;
+        alert("🔥 NUKE BERHASIL!\n\nTransaksi dalam rentang waktu tersebut telah dihancurkan.");
+        loadDashboard();
+        loadTransactions();
+      } catch (err) {
+        alert("Gagal melakukan Nuke: " + err.message);
+      }
     }
 
     // INIT
